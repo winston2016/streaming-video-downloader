@@ -10,6 +10,8 @@ be extended with ChatGPT integration for automatic clipping.
 from datetime import datetime
 import os
 import threading
+import logging
+from pathlib import Path
 
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -19,11 +21,22 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
+from kivy.uix.slider import Slider
 from kivy.clock import Clock, mainthread
+from kivy.utils import platform
+import webbrowser
 import openai
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logs_path = Path("logs")
+logs_path.mkdir(exist_ok=True)
+logging.basicConfig(
+    filename=logs_path / "auto_cut.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 import yt_dlp
 import instaloader
@@ -67,6 +80,15 @@ def hms_to_seconds(value: str) -> float:
     return h * 3600 + m * 60 + s
 
 
+def seconds_to_hms(value: float) -> str:
+    """Convert seconds to HH:MM:SS string."""
+    value = max(0, float(value))
+    h = int(value // 3600)
+    m = int((value % 3600) // 60)
+    s = int(value % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
 class MyLogger:
     def debug(self, msg):
         pass
@@ -76,6 +98,43 @@ class MyLogger:
 
     def error(self, msg):
         print(msg)
+
+
+def ask_upload(paths):
+    layout = BoxLayout(orientation="vertical", padding=10)
+    layout.add_widget(Label(text="Cortes gerados. Postar automaticamente?"))
+    btn_yes = Button(text="Sim", size_hint_y=None, height=40)
+    btn_no = Button(text="Não", size_hint_y=None, height=40)
+    layout.add_widget(btn_yes)
+    layout.add_widget(btn_no)
+    popup = Popup(title="Postar", content=layout, size_hint=(0.75, 0.5))
+
+    def do_upload(_):
+        popup.dismiss()
+        threading.Thread(target=upload_videos, args=(paths,), daemon=True).start()
+
+    btn_yes.bind(on_press=do_upload)
+    btn_no.bind(on_press=popup.dismiss)
+    popup.open()
+
+
+def upload_videos(paths):
+    from uploader import youtube, instagram, tiktok
+    if "youtube" in paths:
+        try:
+            youtube.upload_video(paths["youtube"], title="Corte")
+        except Exception as exc:
+            print("YouTube upload failed:", exc)
+    if "instagram" in paths:
+        try:
+            instagram.upload_video(paths["instagram"], caption="Corte")
+        except Exception as exc:
+            print("Instagram upload failed:", exc)
+    if "tiktok" in paths:
+        try:
+            tiktok.upload_video(paths["tiktok"])
+        except Exception as exc:
+            print("TikTok upload failed:", exc)
 
 
 # Screens -----------------------------------------------------------------
@@ -107,6 +166,21 @@ class DownloadScreen(Screen):
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(Label(text="Sites suportados:"))
+        icons = BoxLayout(size_hint_y=None, height=40, spacing=10)
+
+        def add_icon(name, url):
+            img = os.path.join("assets", f"{name}.ppm")
+            btn = Button(size_hint=(None, None), size=(40, 40),
+                         background_normal=img, background_down=img)
+            btn.bind(on_press=lambda *_: self.open_site(url))
+            icons.add_widget(btn)
+
+        add_icon("youtube", "https://www.youtube.com")
+        add_icon("tiktok", "https://www.tiktok.com")
+        add_icon("instagram", "https://www.instagram.com")
+
+        layout.add_widget(icons)
         layout.add_widget(Label(text="URL do vídeo:"))
         layout.add_widget(self.url_input)
         btn = Button(text="Baixar", size_hint_y=None, height=40)
@@ -130,6 +204,13 @@ class DownloadScreen(Screen):
         popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
         btn.bind(on_press=popup.dismiss)
         popup.open()
+
+    def open_site(self, url):
+        # Use different behavior depending on the current platform
+        if platform in ("android", "ios"):
+            webbrowser.open(url)
+        else:
+            webbrowser.open(url, new=1)
 
     # Download helpers -----------------------------------------------------
     def _hook(self, d):
@@ -199,6 +280,8 @@ class CutScreen(Screen):
         self.start_input = TextInput(hint_text="Início (HH:MM:SS)", size_hint_y=None, height=40)
         self.end_input = TextInput(hint_text="Fim (HH:MM:SS)", size_hint_y=None, height=40)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
+        self.start_slider = None
+        self.end_slider = None
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_choose = Button(text="Selecionar Vídeo")
@@ -207,6 +290,8 @@ class CutScreen(Screen):
         layout.add_widget(self.file_path)
         layout.add_widget(self.start_input)
         layout.add_widget(self.end_input)
+        self.slider_box = BoxLayout(orientation="vertical")
+        layout.add_widget(self.slider_box)
         btn_cut = Button(text="Cortar", size_hint_y=None, height=40)
         btn_cut.bind(on_press=self.start_cut)
         layout.add_widget(btn_cut)
@@ -214,7 +299,10 @@ class CutScreen(Screen):
         back = Button(text="Voltar", size_hint_y=None, height=40)
         back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
         layout.add_widget(back)
+        self.layout = layout
         self.add_widget(layout)
+        self.start_input.bind(text=self._on_start_text)
+        self.end_input.bind(text=self._on_end_text)
 
     def choose_file(self, *_):
         if filedialog is None:
@@ -225,19 +313,74 @@ class CutScreen(Screen):
         root.destroy()
         if path:
             self.file_path.text = path
+            try:
+                duration = VideoFileClip(path).duration
+            except Exception as exc:
+                self.show_popup("Erro", str(exc))
+                return
+            self.slider_box.clear_widgets()
+            self.start_slider = Slider(min=0, max=duration, value=0)
+            self.end_slider = Slider(min=0, max=duration, value=duration)
+            self.start_slider.bind(value=self._on_start_slider)
+            self.end_slider.bind(value=self._on_end_slider)
+            self.slider_box.add_widget(self.start_slider)
+            self.slider_box.add_widget(self.end_slider)
+            self.start_input.text = "00:00:00"
+            self.end_input.text = seconds_to_hms(duration)
 
     @mainthread
     def update_progress(self, value):
         self.progress.value = value
 
+    def _on_start_slider(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        self._sync = True
+        self.start_input.text = seconds_to_hms(value)
+        self._sync = False
+
+    def _on_end_slider(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        self._sync = True
+        self.end_input.text = seconds_to_hms(value)
+        self._sync = False
+
+    def _on_start_text(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        try:
+            sec = hms_to_seconds(value)
+        except ValueError:
+            return
+        if self.start_slider:
+            self._sync = True
+            self.start_slider.value = sec
+            self._sync = False
+
+    def _on_end_text(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        try:
+            sec = hms_to_seconds(value)
+        except ValueError:
+            return
+        if self.end_slider:
+            self._sync = True
+            self.end_slider.value = sec
+            self._sync = False
     def _cut_video(self, path, start, end):
-        clip = VideoFileClip(path).subclip(start, end)
-        for platform in ["youtube", "tiktok", "instagram"]:
-            out_dir = _get_platform_dir(platform)
-            out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
-            clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+        if end <= start:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", "Fim deve ser maior que início"))
+            return
+        with VideoFileClip(path) as clip:
+            sub = clip.subclip(start, end)
+            for platform in ["youtube", "tiktok", "instagram"]:
+                out_dir = _get_platform_dir(platform)
+                out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
+                sub.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
+        Clock.schedule_once(lambda *_: ask_upload(paths))
 
     def start_cut(self, *_):
         path = self.file_path.text
@@ -264,9 +407,25 @@ class ConfigScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.api_input = TextInput(text=os.getenv("OPENAI_API_KEY", ""), size_hint_y=None, height=40)
+        self.yt_client_input = TextInput(text=os.getenv("YOUTUBE_CLIENT_SECRETS", ""), size_hint_y=None, height=40)
+        self.insta_user_input = TextInput(text=os.getenv("INSTAGRAM_USER", ""), size_hint_y=None, height=40)
+        self.insta_pass_input = TextInput(text=os.getenv("INSTAGRAM_PASSWORD", ""), size_hint_y=None, height=40, password=True)
+        self.tiktok_user_input = TextInput(text=os.getenv("TIKTOK_USER", ""), size_hint_y=None, height=40)
+        self.tiktok_pass_input = TextInput(text=os.getenv("TIKTOK_PASSWORD", ""), size_hint_y=None, height=40, password=True)
+
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         layout.add_widget(Label(text="Chave da API ChatGPT", font_size="20sp"))
         layout.add_widget(self.api_input)
+        layout.add_widget(Label(text="Arquivo client_secrets do YouTube"))
+        layout.add_widget(self.yt_client_input)
+        layout.add_widget(Label(text="Usuário do Instagram"))
+        layout.add_widget(self.insta_user_input)
+        layout.add_widget(Label(text="Senha do Instagram"))
+        layout.add_widget(self.insta_pass_input)
+        layout.add_widget(Label(text="Usuário do TikTok"))
+        layout.add_widget(self.tiktok_user_input)
+        layout.add_widget(Label(text="Senha do TikTok"))
+        layout.add_widget(self.tiktok_pass_input)
         btn_save = Button(text="Salvar", size_hint_y=None, height=40)
         btn_save.bind(on_press=self.save_key)
         layout.add_widget(btn_save)
@@ -276,11 +435,19 @@ class ConfigScreen(Screen):
         self.add_widget(layout)
 
     def save_key(self, *_):
-        key = self.api_input.text.strip()
-        os.environ["OPENAI_API_KEY"] = key
+        data = {
+            "OPENAI_API_KEY": self.api_input.text.strip(),
+            "YOUTUBE_CLIENT_SECRETS": self.yt_client_input.text.strip(),
+            "INSTAGRAM_USER": self.insta_user_input.text.strip(),
+            "INSTAGRAM_PASSWORD": self.insta_pass_input.text.strip(),
+            "TIKTOK_USER": self.tiktok_user_input.text.strip(),
+            "TIKTOK_PASSWORD": self.tiktok_pass_input.text.strip(),
+        }
+        os.environ.update(data)
         with open(".env", "w") as f:
-            f.write(f"OPENAI_API_KEY={key}\n")
-        self.show_popup("Sucesso", "Chave salva")
+            for k, v in data.items():
+                f.write(f"{k}={v}\n")
+        self.show_popup("Sucesso", "Configurações salvas")
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
@@ -377,8 +544,10 @@ class AutoCutScreen(Screen):
                 max_tokens=200,
             )
             text = completion.choices[0].message.content
+            logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
         except Exception as exc:
-            self.show_popup("Erro", str(exc))
+            logging.exception("OpenAI request failed for prompt:\n%s", prompt)
+            self.show_popup("Erro", f"{exc.__class__.__name__}: {exc}")
             return
         self.show_suggestions(text)
 
@@ -409,7 +578,7 @@ class AutoCutScreen(Screen):
         out_dir = _get_platform_dir("gpt")
         out_file = os.path.join(out_dir, f"corte_{int(start)}_{int(end)}.mp4")
         clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
+        Clock.schedule_once(lambda *_: ask_upload({"youtube": out_file}))
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
