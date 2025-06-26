@@ -7,3 +7,4 @@ Cross-platform streaming video downloader built with Python and Kivy.
 - Corte manual de vídeos informando o tempo de início e fim no formato `HH:MM:SS`.
 - Tela de configuração para salvar a chave da API do ChatGPT.
 - Geração automática de sugestões de cortes utilizando o ChatGPT a partir de uma transcrição.
+- Pré-visualização das sugestões com possibilidade de ajuste manual e salvamento do corte.
