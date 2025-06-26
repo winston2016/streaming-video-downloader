@@ -466,12 +466,17 @@ class AutoCutScreen(Screen):
         self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
         self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
         self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
+        self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_video = Button(text="Selecionar Vídeo")
         btn_video.bind(on_press=self.choose_file)
         layout.add_widget(btn_video)
         layout.add_widget(self.file_path)
+        btn_transcribe = Button(text="Transcrever", size_hint_y=None, height=40)
+        btn_transcribe.bind(on_press=self.transcribe)
+        layout.add_widget(btn_transcribe)
+        layout.add_widget(self.progress)
         layout.add_widget(self.transcript_input)
         layout.add_widget(self.niche_input)
         btn_analyze = Button(text="Gerar Sugestões", size_hint_y=None, height=40)
@@ -492,6 +497,35 @@ class AutoCutScreen(Screen):
         root.destroy()
         if path:
             self.file_path.text = path
+
+    def transcribe(self, *_):
+        path = self.file_path.text
+        if not path:
+            self.show_popup("Erro", "Selecione o vídeo")
+            return
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            self.show_popup("Erro", "Configure a chave da API")
+            return
+        openai.api_key = key
+        self.update_progress(10)
+        threading.Thread(target=self._transcribe, args=(path,), daemon=True).start()
+
+    @mainthread
+    def update_progress(self, value):
+        self.progress.value = value
+
+    def _transcribe(self, path: str):
+        try:
+            with open(path, "rb") as f:
+                resp = openai.audio.transcriptions.create(file=f, model="whisper-1")
+            text = resp.text if hasattr(resp, "text") else resp["text"]
+            Clock.schedule_once(lambda *_: self.update_progress(50))
+        except Exception as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            return
+        Clock.schedule_once(lambda *_: setattr(self.transcript_input, "text", text))
+        Clock.schedule_once(lambda *_: self.update_progress(100))
 
     def generate(self, *_):
         key = os.getenv("OPENAI_API_KEY")
