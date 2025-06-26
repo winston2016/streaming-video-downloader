@@ -171,6 +171,7 @@ class DownloadScreen(Screen):
         layout.add_widget(Label(text="Sites suportados:"))
         icons = BoxLayout(size_hint_y=None, height=40, spacing=10)
 
+        Clock.schedule_once(self.hide_loading)
         def add_icon(name, url):
             img = os.path.join("assets", f"{name}.ppm")
             btn = Button(size_hint=(None, None), size=(40, 40),
@@ -398,6 +399,7 @@ class CutScreen(Screen):
             self._loading.add_widget(layout)
         self._loading.open()
 
+        self.show_loading()
     def hide_loading(self, *_):
         if self._loading is not None:
             self._loading.dismiss()
