@@ -26,6 +26,8 @@ from kivy.uix.modalview import ModalView
 from kivy.clock import Clock, mainthread
 from kivy.utils import platform
 import webbrowser
+from kivy.uix.videoplayer import VideoPlayer
+from kivy.uix.slider import Slider
 import openai
 from dotenv import load_dotenv
 
@@ -616,10 +618,10 @@ class AutoCutScreen(Screen):
         lines = re.findall(r"(\d{2}:\d{2}:\d{2}).*(\d{2}:\d{2}:\d{2})", text)
         for start, end in lines:
             btn = Button(text=f"{start} - {end}", size_hint_y=None, height=40)
-            btn.bind(on_press=lambda _btn, s=start, e=end: self.cut_segment(s, e))
+            btn.bind(on_press=lambda _btn, s=start, e=end: self.preview_segment(s, e))
             self.suggestions_box.add_widget(btn)
 
-    def cut_segment(self, start_str, end_str):
+    def preview_segment(self, start_str, end_str):
         path = self.file_path.text
         if not path:
             self.show_popup("Erro", "Selecione o vídeo")
@@ -630,7 +632,61 @@ class AutoCutScreen(Screen):
         except ValueError:
             self.show_popup("Erro", "Tempos inválidos")
             return
+        self.show_preview(path, start, end)
+
+    def show_preview(self, path, start, end):
+        clip = VideoFileClip(path)
+        duration = clip.duration
+        clip.close()
+        self.preview_start = TextInput(text=seconds_to_hms(start), size_hint_y=None, height=40)
+        self.preview_end = TextInput(text=seconds_to_hms(end), size_hint_y=None, height=40)
+        self.slider_start = Slider(min=0, max=duration, value=start)
+        self.slider_end = Slider(min=0, max=duration, value=end)
+        self.slider_start.bind(value=lambda _, v: setattr(self.preview_start, 'text', seconds_to_hms(v)))
+        self.slider_end.bind(value=lambda _, v: setattr(self.preview_end, 'text', seconds_to_hms(v)))
+        video = VideoPlayer(source=path, state='play')
+        video.position = start
+        video.bind(position=lambda inst, val: self._stop_at_end(inst, val, end))
+        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        layout.add_widget(video)
+        row1 = BoxLayout(size_hint_y=None, height=40)
+        row1.add_widget(Label(text='Início'))
+        row1.add_widget(self.preview_start)
+        row1.add_widget(self.slider_start)
+        row2 = BoxLayout(size_hint_y=None, height=40)
+        row2.add_widget(Label(text='Fim'))
+        row2.add_widget(self.preview_end)
+        row2.add_widget(self.slider_end)
+        layout.add_widget(row1)
+        layout.add_widget(row2)
+        btn_save = Button(text='Salvar corte', size_hint_y=None, height=40)
+        btn_cancel = Button(text='Cancelar', size_hint_y=None, height=40)
+        btn_box = BoxLayout(size_hint_y=None, height=40)
+        btn_box.add_widget(btn_save)
+        btn_box.add_widget(btn_cancel)
+        layout.add_widget(btn_box)
+        popup = Popup(title='Prévia do corte', content=layout, size_hint=(0.9, 0.9))
+        btn_cancel.bind(on_press=popup.dismiss)
+        btn_save.bind(on_press=lambda *_: self.save_preview_cut(path))
+        popup.open()
+        self.preview_popup = popup
+
+    def _stop_at_end(self, player, position, end):
+        if position >= end:
+            player.state = 'pause'
+
+    def save_preview_cut(self, path):
+        try:
+            start = hms_to_seconds(self.preview_start.text)
+            end = hms_to_seconds(self.preview_end.text)
+        except ValueError:
+            self.show_popup("Erro", "Tempos inválidos")
+            return
+        self.preview_popup.dismiss()
         threading.Thread(target=self._cut_video, args=(path, start, end), daemon=True).start()
+
+    def cut_segment(self, start_str, end_str):
+        self.preview_segment(start_str, end_str)
 
     def _cut_video(self, path, start, end):
         clip = VideoFileClip(path).subclip(start, end)

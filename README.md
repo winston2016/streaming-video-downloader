@@ -30,3 +30,4 @@ Para utilizar a transcrição automática, instale os pacotes listados em `requi
 ## Notas
 
 - Os cortes gerados assumem as seguintes resoluções padronizadas: YouTube 1280x720 (16:9), TikTok 720x1280 (9:16) e Instagram Stories 1080x1920 (9:16).
+- Pré-visualização das sugestões com possibilidade de ajuste manual e salvamento do corte.
