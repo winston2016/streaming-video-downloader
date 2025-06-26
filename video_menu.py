@@ -20,6 +20,8 @@ from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
 from kivy.clock import Clock, mainthread
+from kivy.utils import platform
+import webbrowser
 import openai
 from dotenv import load_dotenv
 
@@ -107,6 +109,21 @@ class DownloadScreen(Screen):
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(Label(text="Sites suportados:"))
+        icons = BoxLayout(size_hint_y=None, height=40, spacing=10)
+
+        def add_icon(name, url):
+            img = os.path.join("assets", f"{name}.ppm")
+            btn = Button(size_hint=(None, None), size=(40, 40),
+                         background_normal=img, background_down=img)
+            btn.bind(on_press=lambda *_: self.open_site(url))
+            icons.add_widget(btn)
+
+        add_icon("youtube", "https://www.youtube.com")
+        add_icon("tiktok", "https://www.tiktok.com")
+        add_icon("instagram", "https://www.instagram.com")
+
+        layout.add_widget(icons)
         layout.add_widget(Label(text="URL do vídeo:"))
         layout.add_widget(self.url_input)
         btn = Button(text="Baixar", size_hint_y=None, height=40)
@@ -130,6 +147,13 @@ class DownloadScreen(Screen):
         popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
         btn.bind(on_press=popup.dismiss)
         popup.open()
+
+    def open_site(self, url):
+        # Use different behavior depending on the current platform
+        if platform in ("android", "ios"):
+            webbrowser.open(url)
+        else:
+            webbrowser.open(url, new=1)
 
     # Download helpers -----------------------------------------------------
     def _hook(self, d):
