@@ -90,6 +90,43 @@ class MyLogger:
         print(msg)
 
 
+def ask_upload(paths):
+    layout = BoxLayout(orientation="vertical", padding=10)
+    layout.add_widget(Label(text="Cortes gerados. Postar automaticamente?"))
+    btn_yes = Button(text="Sim", size_hint_y=None, height=40)
+    btn_no = Button(text="Não", size_hint_y=None, height=40)
+    layout.add_widget(btn_yes)
+    layout.add_widget(btn_no)
+    popup = Popup(title="Postar", content=layout, size_hint=(0.75, 0.5))
+
+    def do_upload(_):
+        popup.dismiss()
+        threading.Thread(target=upload_videos, args=(paths,), daemon=True).start()
+
+    btn_yes.bind(on_press=do_upload)
+    btn_no.bind(on_press=popup.dismiss)
+    popup.open()
+
+
+def upload_videos(paths):
+    from uploader import youtube, instagram, tiktok
+    if "youtube" in paths:
+        try:
+            youtube.upload_video(paths["youtube"], title="Corte")
+        except Exception as exc:
+            print("YouTube upload failed:", exc)
+    if "instagram" in paths:
+        try:
+            instagram.upload_video(paths["instagram"], caption="Corte")
+        except Exception as exc:
+            print("Instagram upload failed:", exc)
+    if "tiktok" in paths:
+        try:
+            tiktok.upload_video(paths["tiktok"])
+        except Exception as exc:
+            print("TikTok upload failed:", exc)
+
+
 # Screens -----------------------------------------------------------------
 
 class MenuScreen(Screen):
@@ -333,7 +370,7 @@ class CutScreen(Screen):
                 out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
                 sub.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
+        Clock.schedule_once(lambda *_: ask_upload(paths))
 
     def start_cut(self, *_):
         path = self.file_path.text
@@ -360,9 +397,25 @@ class ConfigScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.api_input = TextInput(text=os.getenv("OPENAI_API_KEY", ""), size_hint_y=None, height=40)
+        self.yt_client_input = TextInput(text=os.getenv("YOUTUBE_CLIENT_SECRETS", ""), size_hint_y=None, height=40)
+        self.insta_user_input = TextInput(text=os.getenv("INSTAGRAM_USER", ""), size_hint_y=None, height=40)
+        self.insta_pass_input = TextInput(text=os.getenv("INSTAGRAM_PASSWORD", ""), size_hint_y=None, height=40, password=True)
+        self.tiktok_user_input = TextInput(text=os.getenv("TIKTOK_USER", ""), size_hint_y=None, height=40)
+        self.tiktok_pass_input = TextInput(text=os.getenv("TIKTOK_PASSWORD", ""), size_hint_y=None, height=40, password=True)
+
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         layout.add_widget(Label(text="Chave da API ChatGPT", font_size="20sp"))
         layout.add_widget(self.api_input)
+        layout.add_widget(Label(text="Arquivo client_secrets do YouTube"))
+        layout.add_widget(self.yt_client_input)
+        layout.add_widget(Label(text="Usuário do Instagram"))
+        layout.add_widget(self.insta_user_input)
+        layout.add_widget(Label(text="Senha do Instagram"))
+        layout.add_widget(self.insta_pass_input)
+        layout.add_widget(Label(text="Usuário do TikTok"))
+        layout.add_widget(self.tiktok_user_input)
+        layout.add_widget(Label(text="Senha do TikTok"))
+        layout.add_widget(self.tiktok_pass_input)
         btn_save = Button(text="Salvar", size_hint_y=None, height=40)
         btn_save.bind(on_press=self.save_key)
         layout.add_widget(btn_save)
@@ -372,11 +425,19 @@ class ConfigScreen(Screen):
         self.add_widget(layout)
 
     def save_key(self, *_):
-        key = self.api_input.text.strip()
-        os.environ["OPENAI_API_KEY"] = key
+        data = {
+            "OPENAI_API_KEY": self.api_input.text.strip(),
+            "YOUTUBE_CLIENT_SECRETS": self.yt_client_input.text.strip(),
+            "INSTAGRAM_USER": self.insta_user_input.text.strip(),
+            "INSTAGRAM_PASSWORD": self.insta_pass_input.text.strip(),
+            "TIKTOK_USER": self.tiktok_user_input.text.strip(),
+            "TIKTOK_PASSWORD": self.tiktok_pass_input.text.strip(),
+        }
+        os.environ.update(data)
         with open(".env", "w") as f:
-            f.write(f"OPENAI_API_KEY={key}\n")
-        self.show_popup("Sucesso", "Chave salva")
+            for k, v in data.items():
+                f.write(f"{k}={v}\n")
+        self.show_popup("Sucesso", "Configurações salvas")
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
@@ -471,7 +532,7 @@ class AutoCutScreen(Screen):
         out_dir = _get_platform_dir("gpt")
         out_file = os.path.join(out_dir, f"corte_{int(start)}_{int(end)}.mp4")
         clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
+        Clock.schedule_once(lambda *_: ask_upload({"youtube": out_file}))
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
