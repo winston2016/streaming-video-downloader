@@ -232,10 +232,16 @@ class CutScreen(Screen):
 
     def _cut_video(self, path, start, end):
         clip = VideoFileClip(path).subclip(start, end)
-        for platform in ["youtube", "tiktok", "instagram"]:
+        sizes = {
+            "youtube": (1280, 720),
+            "tiktok": (720, 1280),
+            "instagram": (1080, 1920),
+        }
+        for platform, new_size in sizes.items():
             out_dir = _get_platform_dir(platform)
             out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
-            clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+            resized = clip.resize(new_size=new_size)
+            resized.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
 
