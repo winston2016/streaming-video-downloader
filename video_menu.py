@@ -10,6 +10,8 @@ be extended with ChatGPT integration for automatic clipping.
 from datetime import datetime
 import os
 import threading
+import logging
+from pathlib import Path
 
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -27,6 +29,14 @@ import openai
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logs_path = Path("logs")
+logs_path.mkdir(exist_ok=True)
+logging.basicConfig(
+    filename=logs_path / "auto_cut.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 import yt_dlp
 import instaloader
@@ -500,8 +510,10 @@ class AutoCutScreen(Screen):
                 max_tokens=200,
             )
             text = completion.choices[0].message.content
+            logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
         except Exception as exc:
-            self.show_popup("Erro", str(exc))
+            logging.exception("OpenAI request failed for prompt:\n%s", prompt)
+            self.show_popup("Erro", f"{exc.__class__.__name__}: {exc}")
             return
         self.show_suggestions(text)
 
