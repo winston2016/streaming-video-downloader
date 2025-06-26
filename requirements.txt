@@ -25,3 +25,4 @@ requests==2.32.4
 tqdm==4.67.1
 urllib3==2.5.0
 yt-dlp==2025.6.25
+openai==1.30.5
