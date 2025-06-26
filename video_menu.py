@@ -19,6 +19,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
+from kivy.uix.modalview import ModalView
 from kivy.clock import Clock, mainthread
 import openai
 from dotenv import load_dotenv
@@ -105,6 +106,7 @@ class DownloadScreen(Screen):
         super().__init__(**kwargs)
         self.url_input = TextInput(hint_text="URL", size_hint_y=None, height=40)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
+        self._loading = None
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         layout.add_widget(Label(text="URL do vídeo:"))
@@ -121,6 +123,20 @@ class DownloadScreen(Screen):
     @mainthread
     def update_progress(self, value):
         self.progress.value = value
+
+    # Loading helpers -----------------------------------------------------
+    def show_loading(self):
+        if self._loading is None:
+            layout = BoxLayout(orientation="vertical", padding=10)
+            layout.add_widget(Label(text="Carregando..."))
+            self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
+            self._loading.add_widget(layout)
+        self._loading.open()
+
+    def hide_loading(self, *_):
+        if self._loading is not None:
+            self._loading.dismiss()
+            self._loading = None
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
@@ -141,6 +157,7 @@ class DownloadScreen(Screen):
                 pass
         elif d.get("status") == "finished":
             self.update_progress(100)
+            Clock.schedule_once(self.hide_loading)
 
     def _download_youtube(self, url):
         path = _get_platform_dir("youtube")
@@ -181,6 +198,7 @@ class DownloadScreen(Screen):
 
     def start_download(self, *_):
         self.progress.value = 0
+        self.show_loading()
         url = self.url_input.text
         if "youtube" in url:
             threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
@@ -189,6 +207,7 @@ class DownloadScreen(Screen):
         elif "instagram" in url:
             threading.Thread(target=self._download_instagram, args=(url,), daemon=True).start()
         else:
+            self.hide_loading()
             self.show_popup("Erro", "Plataforma não reconhecida")
 
 
@@ -199,6 +218,7 @@ class CutScreen(Screen):
         self.start_input = TextInput(hint_text="Início (HH:MM:SS)", size_hint_y=None, height=40)
         self.end_input = TextInput(hint_text="Fim (HH:MM:SS)", size_hint_y=None, height=40)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
+        self._loading = None
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_choose = Button(text="Selecionar Vídeo")
@@ -230,6 +250,20 @@ class CutScreen(Screen):
     def update_progress(self, value):
         self.progress.value = value
 
+    # Loading helpers -----------------------------------------------------
+    def show_loading(self):
+        if self._loading is None:
+            layout = BoxLayout(orientation="vertical", padding=10)
+            layout.add_widget(Label(text="Carregando..."))
+            self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
+            self._loading.add_widget(layout)
+        self._loading.open()
+
+    def hide_loading(self, *_):
+        if self._loading is not None:
+            self._loading.dismiss()
+            self._loading = None
+
     def _cut_video(self, path, start, end):
         clip = VideoFileClip(path).subclip(start, end)
         for platform in ["youtube", "tiktok", "instagram"]:
@@ -238,6 +272,7 @@ class CutScreen(Screen):
             clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
+        Clock.schedule_once(self.hide_loading)
 
     def start_cut(self, *_):
         path = self.file_path.text
@@ -248,6 +283,7 @@ class CutScreen(Screen):
             self.show_popup("Erro", "Tempos inválidos")
             return
         self.progress.value = 0
+        self.show_loading()
         threading.Thread(target=self._cut_video, args=(path, start, end), daemon=True).start()
 
     def show_popup(self, title, message):
@@ -299,6 +335,7 @@ class AutoCutScreen(Screen):
         self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
         self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
         self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
+        self._loading = None
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_video = Button(text="Selecionar Vídeo")
@@ -326,11 +363,26 @@ class AutoCutScreen(Screen):
         if path:
             self.file_path.text = path
 
+    # Loading helpers -----------------------------------------------------
+    def show_loading(self):
+        if self._loading is None:
+            layout = BoxLayout(orientation="vertical", padding=10)
+            layout.add_widget(Label(text="Carregando..."))
+            self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
+            self._loading.add_widget(layout)
+        self._loading.open()
+
+    def hide_loading(self, *_):
+        if self._loading is not None:
+            self._loading.dismiss()
+            self._loading = None
+
     def generate(self, *_):
         key = os.getenv("OPENAI_API_KEY")
         if not key:
             self.show_popup("Erro", "Configure a chave da API")
             return
+        self.show_loading()
         openai.api_key = key
         prompt = (
             "Sugira até 3 cortes interessantes no formato HH:MM:SS-HH:MM:SS "
@@ -344,8 +396,10 @@ class AutoCutScreen(Screen):
             )
             text = completion.choices[0].message.content
         except Exception as exc:
+            self.hide_loading()
             self.show_popup("Erro", str(exc))
             return
+        self.hide_loading()
         self.show_suggestions(text)
 
     def show_suggestions(self, text):
@@ -376,6 +430,7 @@ class AutoCutScreen(Screen):
         out_file = os.path.join(out_dir, f"corte_{int(start)}_{int(end)}.mp4")
         clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
+        Clock.schedule_once(self.hide_loading)
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
