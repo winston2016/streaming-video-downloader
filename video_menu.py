@@ -19,6 +19,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
+from kivy.uix.slider import Slider
 from kivy.clock import Clock, mainthread
 import openai
 from dotenv import load_dotenv
@@ -65,6 +66,15 @@ def hms_to_seconds(value: str) -> float:
     else:
         raise ValueError("Tempo inválido")
     return h * 3600 + m * 60 + s
+
+
+def seconds_to_hms(value: float) -> str:
+    """Convert seconds to HH:MM:SS string."""
+    value = max(0, float(value))
+    h = int(value // 3600)
+    m = int((value % 3600) // 60)
+    s = int(value % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 
 class MyLogger:
@@ -199,6 +209,8 @@ class CutScreen(Screen):
         self.start_input = TextInput(hint_text="Início (HH:MM:SS)", size_hint_y=None, height=40)
         self.end_input = TextInput(hint_text="Fim (HH:MM:SS)", size_hint_y=None, height=40)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
+        self.start_slider = None
+        self.end_slider = None
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_choose = Button(text="Selecionar Vídeo")
@@ -207,6 +219,8 @@ class CutScreen(Screen):
         layout.add_widget(self.file_path)
         layout.add_widget(self.start_input)
         layout.add_widget(self.end_input)
+        self.slider_box = BoxLayout(orientation="vertical")
+        layout.add_widget(self.slider_box)
         btn_cut = Button(text="Cortar", size_hint_y=None, height=40)
         btn_cut.bind(on_press=self.start_cut)
         layout.add_widget(btn_cut)
@@ -214,7 +228,10 @@ class CutScreen(Screen):
         back = Button(text="Voltar", size_hint_y=None, height=40)
         back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
         layout.add_widget(back)
+        self.layout = layout
         self.add_widget(layout)
+        self.start_input.bind(text=self._on_start_text)
+        self.end_input.bind(text=self._on_end_text)
 
     def choose_file(self, *_):
         if filedialog is None:
@@ -225,17 +242,72 @@ class CutScreen(Screen):
         root.destroy()
         if path:
             self.file_path.text = path
+            try:
+                duration = VideoFileClip(path).duration
+            except Exception as exc:
+                self.show_popup("Erro", str(exc))
+                return
+            self.slider_box.clear_widgets()
+            self.start_slider = Slider(min=0, max=duration, value=0)
+            self.end_slider = Slider(min=0, max=duration, value=duration)
+            self.start_slider.bind(value=self._on_start_slider)
+            self.end_slider.bind(value=self._on_end_slider)
+            self.slider_box.add_widget(self.start_slider)
+            self.slider_box.add_widget(self.end_slider)
+            self.start_input.text = "00:00:00"
+            self.end_input.text = seconds_to_hms(duration)
 
     @mainthread
     def update_progress(self, value):
         self.progress.value = value
 
+    def _on_start_slider(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        self._sync = True
+        self.start_input.text = seconds_to_hms(value)
+        self._sync = False
+
+    def _on_end_slider(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        self._sync = True
+        self.end_input.text = seconds_to_hms(value)
+        self._sync = False
+
+    def _on_start_text(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        try:
+            sec = hms_to_seconds(value)
+        except ValueError:
+            return
+        if self.start_slider:
+            self._sync = True
+            self.start_slider.value = sec
+            self._sync = False
+
+    def _on_end_text(self, instance, value):
+        if getattr(self, "_sync", False):
+            return
+        try:
+            sec = hms_to_seconds(value)
+        except ValueError:
+            return
+        if self.end_slider:
+            self._sync = True
+            self.end_slider.value = sec
+            self._sync = False
     def _cut_video(self, path, start, end):
-        clip = VideoFileClip(path).subclip(start, end)
-        for platform in ["youtube", "tiktok", "instagram"]:
-            out_dir = _get_platform_dir(platform)
-            out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
-            clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+        if end <= start:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", "Fim deve ser maior que início"))
+            return
+        with VideoFileClip(path) as clip:
+            sub = clip.subclip(start, end)
+            for platform in ["youtube", "tiktok", "instagram"]:
+                out_dir = _get_platform_dir(platform)
+                out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
+                sub.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
 
