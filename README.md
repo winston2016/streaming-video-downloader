@@ -26,3 +26,7 @@ Essas informações são utilizadas pelos módulos de upload em `uploader/`.
 - Transcrição automática de vídeos usando o modelo `whisper` da OpenAI.
 
 Para utilizar a transcrição automática, instale os pacotes listados em `requirements.txt`, em especial o `openai`.
+
+## Notas
+
+- Os cortes gerados assumem as seguintes resoluções padronizadas: YouTube 1280x720 (16:9), TikTok 720x1280 (9:16) e Instagram Stories 1080x1920 (9:16).
