@@ -20,6 +20,10 @@ from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
 from kivy.clock import Clock, mainthread
+import openai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import yt_dlp
 import instaloader
@@ -40,6 +44,27 @@ def _get_platform_dir(platform: str) -> str:
     path = os.path.join("videos", date_str, platform)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def hms_to_seconds(value: str) -> float:
+    """Convert HH:MM:SS string to seconds."""
+    parts = value.strip().split(":")
+    try:
+        parts = [float(p) for p in parts]
+    except ValueError:
+        raise ValueError("Tempo inválido")
+    if len(parts) == 3:
+        h, m, s = parts
+    elif len(parts) == 2:
+        h = 0
+        m, s = parts
+    elif len(parts) == 1:
+        h = 0
+        m = 0
+        s = parts[0]
+    else:
+        raise ValueError("Tempo inválido")
+    return h * 3600 + m * 60 + s
 
 
 class MyLogger:
@@ -66,6 +91,12 @@ class MenuScreen(Screen):
         btn_cut = Button(text="Cortar Vídeo")
         btn_cut.bind(on_press=lambda *_: setattr(self.manager, "current", "cut"))
         layout.add_widget(btn_cut)
+        btn_auto = Button(text="Corte Automático")
+        btn_auto.bind(on_press=lambda *_: setattr(self.manager, "current", "auto"))
+        layout.add_widget(btn_auto)
+        btn_conf = Button(text="Configurar API")
+        btn_conf.bind(on_press=lambda *_: setattr(self.manager, "current", "config"))
+        layout.add_widget(btn_conf)
         self.add_widget(layout)
 
 
@@ -164,9 +195,9 @@ class DownloadScreen(Screen):
 class CutScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.file_path = TextInput(hint_text="Caminho do vídeo", size_hint_y=None, height=40)
-        self.start_input = TextInput(hint_text="Início em segundos", size_hint_y=None, height=40)
-        self.end_input = TextInput(hint_text="Fim em segundos", size_hint_y=None, height=40)
+        self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
+        self.start_input = TextInput(hint_text="Início (HH:MM:SS)", size_hint_y=None, height=40)
+        self.end_input = TextInput(hint_text="Fim (HH:MM:SS)", size_hint_y=None, height=40)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
@@ -211,13 +242,140 @@ class CutScreen(Screen):
     def start_cut(self, *_):
         path = self.file_path.text
         try:
-            start = float(self.start_input.text)
-            end = float(self.end_input.text)
+            start = hms_to_seconds(self.start_input.text)
+            end = hms_to_seconds(self.end_input.text)
         except ValueError:
             self.show_popup("Erro", "Tempos inválidos")
             return
         self.progress.value = 0
         threading.Thread(target=self._cut_video, args=(path, start, end), daemon=True).start()
+
+    def show_popup(self, title, message):
+        popup_layout = BoxLayout(orientation="vertical", padding=10)
+        popup_layout.add_widget(Label(text=message))
+        btn = Button(text="Fechar", size_hint_y=None, height=40)
+        popup_layout.add_widget(btn)
+        popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
+        btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+
+class ConfigScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.api_input = TextInput(text=os.getenv("OPENAI_API_KEY", ""), size_hint_y=None, height=40)
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(Label(text="Chave da API ChatGPT", font_size="20sp"))
+        layout.add_widget(self.api_input)
+        btn_save = Button(text="Salvar", size_hint_y=None, height=40)
+        btn_save.bind(on_press=self.save_key)
+        layout.add_widget(btn_save)
+        back = Button(text="Voltar", size_hint_y=None, height=40)
+        back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
+        layout.add_widget(back)
+        self.add_widget(layout)
+
+    def save_key(self, *_):
+        key = self.api_input.text.strip()
+        os.environ["OPENAI_API_KEY"] = key
+        with open(".env", "w") as f:
+            f.write(f"OPENAI_API_KEY={key}\n")
+        self.show_popup("Sucesso", "Chave salva")
+
+    def show_popup(self, title, message):
+        popup_layout = BoxLayout(orientation="vertical", padding=10)
+        popup_layout.add_widget(Label(text=message))
+        btn = Button(text="Fechar", size_hint_y=None, height=40)
+        popup_layout.add_widget(btn)
+        popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
+        btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+
+class AutoCutScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
+        self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
+        self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
+        self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        btn_video = Button(text="Selecionar Vídeo")
+        btn_video.bind(on_press=self.choose_file)
+        layout.add_widget(btn_video)
+        layout.add_widget(self.file_path)
+        layout.add_widget(self.transcript_input)
+        layout.add_widget(self.niche_input)
+        btn_analyze = Button(text="Gerar Sugestões", size_hint_y=None, height=40)
+        btn_analyze.bind(on_press=self.generate)
+        layout.add_widget(btn_analyze)
+        layout.add_widget(Label(text="Sugestões:"))
+        layout.add_widget(self.suggestions_box)
+        back = Button(text="Voltar", size_hint_y=None, height=40)
+        back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
+        layout.add_widget(back)
+        self.add_widget(layout)
+
+    def choose_file(self, *_):
+        if filedialog is None:
+            return
+        root = Tk(); root.withdraw()
+        path = filedialog.askopenfilename(title="Selecione o vídeo")
+        root.destroy()
+        if path:
+            self.file_path.text = path
+
+    def generate(self, *_):
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            self.show_popup("Erro", "Configure a chave da API")
+            return
+        openai.api_key = key
+        prompt = (
+            "Sugira até 3 cortes interessantes no formato HH:MM:SS-HH:MM:SS "
+            "baseado no nicho '" + self.niche_input.text + "'.\n" + self.transcript_input.text
+        )
+        try:
+            completion = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+            )
+            text = completion.choices[0].message.content
+        except Exception as exc:
+            self.show_popup("Erro", str(exc))
+            return
+        self.show_suggestions(text)
+
+    def show_suggestions(self, text):
+        import re
+        self.suggestions_box.clear_widgets()
+        lines = re.findall(r"(\d{2}:\d{2}:\d{2}).*(\d{2}:\d{2}:\d{2})", text)
+        for start, end in lines:
+            btn = Button(text=f"{start} - {end}", size_hint_y=None, height=40)
+            btn.bind(on_press=lambda _btn, s=start, e=end: self.cut_segment(s, e))
+            self.suggestions_box.add_widget(btn)
+
+    def cut_segment(self, start_str, end_str):
+        path = self.file_path.text
+        if not path:
+            self.show_popup("Erro", "Selecione o vídeo")
+            return
+        try:
+            start = hms_to_seconds(start_str)
+            end = hms_to_seconds(end_str)
+        except ValueError:
+            self.show_popup("Erro", "Tempos inválidos")
+            return
+        threading.Thread(target=self._cut_video, args=(path, start, end), daemon=True).start()
+
+    def _cut_video(self, path, start, end):
+        clip = VideoFileClip(path).subclip(start, end)
+        out_dir = _get_platform_dir("gpt")
+        out_file = os.path.join(out_dir, f"corte_{int(start)}_{int(end)}.mp4")
+        clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
@@ -237,6 +395,8 @@ class VideoApp(App):
         sm.add_widget(MenuScreen(name="menu"))
         sm.add_widget(DownloadScreen(name="download"))
         sm.add_widget(CutScreen(name="cut"))
+        sm.add_widget(AutoCutScreen(name="auto"))
+        sm.add_widget(ConfigScreen(name="config"))
         return sm
 
 
