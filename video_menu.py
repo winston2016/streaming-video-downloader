@@ -82,11 +82,11 @@ def hms_to_seconds(value: str) -> float:
 
 
 def seconds_to_hms(value: float) -> str:
-    """Convert seconds to HH:MM:SS string."""
-    value = max(0, float(value))
-    h = int(value // 3600)
-    m = int((value % 3600) // 60)
-    s = int(value % 60)
+    """Format seconds into a ``HH:MM:SS`` string."""
+    total = int(round(value))
+    h = total // 3600
+    m = (total % 3600) // 60
+    s = total % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
@@ -632,8 +632,13 @@ class AutoCutScreen(Screen):
 
     def _cut_video(self, path, start, end):
         clip = VideoFileClip(path).subclip(start, end)
+        start_str = seconds_to_hms(start)
+        end_str = seconds_to_hms(end)
         out_dir = _get_platform_dir("gpt")
-        out_file = os.path.join(out_dir, f"corte_{int(start)}_{int(end)}.mp4")
+        out_file = os.path.join(
+            out_dir,
+            f"corte_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}.mp4",
+        )
         clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
         Clock.schedule_once(self.hide_loading)
