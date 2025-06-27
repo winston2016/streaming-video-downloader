@@ -36,3 +36,18 @@ Para utilizar a transcrição automática, instale os pacotes listados em `requi
 - Pré-visualização das sugestões com possibilidade de ajuste manual e salvamento do corte.
 - Para usar `VIDEO_HWACCEL`, o FFmpeg deve ser compilado com o codec
   de aceleração correspondente (ex.: suporte ao NVENC para `h264_nvenc`).
+
+## Desempenho de codificação de vídeo
+
+Os scripts utilizam o MoviePy para gerar os cortes. Por padrão o MoviePy
+emprega codecs de CPU fornecidos pelo FFmpeg, o que pode tornar a exportação
+mais lenta. Caso a sua instalação do FFmpeg tenha sido compilada com suporte a
+NVENC, VAAPI ou tecnologias similares, é possível habilitar a codificação via
+GPU definindo a variável de ambiente `VIDEO_HWACCEL=1` antes da execução.
+
+```bash
+export VIDEO_HWACCEL=1
+python cortarvideo.py
+```
+
+Sem esse flag os vídeos continuam sendo processados somente pela CPU.
