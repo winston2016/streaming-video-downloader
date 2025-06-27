@@ -315,7 +315,22 @@ class DownloadScreen(Screen):
         }
         cookie_file = os.getenv("TIKTOK_COOKIES_FILE")
         cookie_browser = os.getenv("TIKTOK_COOKIES_BROWSER")
+        if not cookie_file and not cookie_browser:
+            Clock.schedule_once(
+                lambda *_: self.show_popup(
+                    "Erro",
+                    "TikTok requer autenticação. Defina TIKTOK_COOKIES_FILE ou TIKTOK_COOKIES_BROWSER no .env",
+                )
+            )
+            return
         if cookie_file:
+            if not os.path.exists(cookie_file):
+                Clock.schedule_once(
+                    lambda *_: self.show_popup(
+                        "Erro", f"Arquivo de cookies não encontrado: {cookie_file}"
+                    )
+                )
+                return
             opts["cookiefile"] = cookie_file
         elif cookie_browser:
             opts["cookiesfrombrowser"] = cookie_browser

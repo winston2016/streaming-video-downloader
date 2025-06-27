@@ -26,7 +26,8 @@ TIKTOK_COOKIES_BROWSER=<navegador ou navegador:perfil>
 ```
 
 Defina `TIKTOK_COOKIES_FILE` ou `TIKTOK_COOKIES_BROWSER` caso o TikTok
-exija autenticação para baixar o vídeo.
+exija autenticação para baixar o vídeo. Se utilizar `TIKTOK_COOKIES_FILE`,
+confira se o caminho informado realmente existe.
 
 Essas informações são utilizadas pelos módulos de upload em `uploader/`.
 - Defina `VIDEO_HWACCEL=1` para habilitar exportação de vídeos utilizando um
