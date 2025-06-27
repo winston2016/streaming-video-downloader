@@ -248,6 +248,77 @@ class DownloadScreen(Screen):
         btn.bind(on_press=popup.dismiss)
         popup.open()
 
+    def open_site(self, url):
+        # Use different behavior depending on the current platform
+        if platform in ("android", "ios"):
+            webbrowser.open(url)
+        else:
+            webbrowser.open(url, new=1)
+
+    # Download helpers -----------------------------------------------------
+    def _hook(self, d):
+        if d.get("status") == "downloading":
+            percent_str = d.get("_percent_str", "0").replace("%", "").strip()
+            try:
+                self.update_progress(float(percent_str))
+            except ValueError:
+                pass
+        elif d.get("status") == "finished":
+            self.update_progress(100)
+            Clock.schedule_once(self.hide_loading)
+
+    def _download_youtube(self, url):
+        path = _get_platform_dir("youtube")
+        opts = {
+            "format": "bestvideo+bestaudio/best",
+            "outtmpl": os.path.join(path, "%(title)s.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+            "logger": MyLogger(),
+            "progress_hooks": [self._hook],
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
+
+    def _download_tiktok(self, url):
+        path = _get_platform_dir("tiktok")
+        opts = {
+            "format": "bestvideo+bestaudio/best",
+            "outtmpl": os.path.join(path, "%(title)s.%(ext)s"),
+            "merge_output_format": "mp4",
+            "quiet": True,
+            "no_warnings": True,
+            "logger": MyLogger(),
+            "progress_hooks": [self._hook],
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
+
+    def _download_instagram(self, url):
+        path = _get_platform_dir("instagram")
+        loader = instaloader.Instaloader(dirname_pattern=path, filename_pattern="{shortcode}")
+        media_id = url.rstrip("/").split("/")[-1]
+        post = instaloader.Post.from_shortcode(loader.context, media_id)
+        loader.download_post(post, target="post")
+        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
+
+    def start_download(self, *_):
+        self.progress.value = 0
+        self.show_loading()
+        url = self.url_input.text
+        if "youtube" in url:
+            threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
+        elif "tiktok" in url:
+            threading.Thread(target=self._download_tiktok, args=(url,), daemon=True).start()
+        elif "instagram" in url:
+            threading.Thread(target=self._download_instagram, args=(url,), daemon=True).start()
+        else:
+            self.hide_loading()
+            self.show_popup("Erro", "Plataforma não reconhecida")
+
+
 
 class PostScreen(Screen):
     """Screen for selecting a video and generating descriptions for posting."""
@@ -357,75 +428,6 @@ class PostScreen(Screen):
         btn.bind(on_press=popup.dismiss)
         popup.open()
 
-    def open_site(self, url):
-        # Use different behavior depending on the current platform
-        if platform in ("android", "ios"):
-            webbrowser.open(url)
-        else:
-            webbrowser.open(url, new=1)
-
-    # Download helpers -----------------------------------------------------
-    def _hook(self, d):
-        if d.get("status") == "downloading":
-            percent_str = d.get("_percent_str", "0").replace("%", "").strip()
-            try:
-                self.update_progress(float(percent_str))
-            except ValueError:
-                pass
-        elif d.get("status") == "finished":
-            self.update_progress(100)
-            Clock.schedule_once(self.hide_loading)
-
-    def _download_youtube(self, url):
-        path = _get_platform_dir("youtube")
-        opts = {
-            "format": "bestvideo+bestaudio/best",
-            "outtmpl": os.path.join(path, "%(title)s.%(ext)s"),
-            "quiet": True,
-            "no_warnings": True,
-            "logger": MyLogger(),
-            "progress_hooks": [self._hook],
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
-
-    def _download_tiktok(self, url):
-        path = _get_platform_dir("tiktok")
-        opts = {
-            "format": "bestvideo+bestaudio/best",
-            "outtmpl": os.path.join(path, "%(title)s.%(ext)s"),
-            "merge_output_format": "mp4",
-            "quiet": True,
-            "no_warnings": True,
-            "logger": MyLogger(),
-            "progress_hooks": [self._hook],
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
-
-    def _download_instagram(self, url):
-        path = _get_platform_dir("instagram")
-        loader = instaloader.Instaloader(dirname_pattern=path, filename_pattern="{shortcode}")
-        media_id = url.rstrip("/").split("/")[-1]
-        post = instaloader.Post.from_shortcode(loader.context, media_id)
-        loader.download_post(post, target="post")
-        Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
-
-    def start_download(self, *_):
-        self.progress.value = 0
-        self.show_loading()
-        url = self.url_input.text
-        if "youtube" in url:
-            threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
-        elif "tiktok" in url:
-            threading.Thread(target=self._download_tiktok, args=(url,), daemon=True).start()
-        elif "instagram" in url:
-            threading.Thread(target=self._download_instagram, args=(url,), daemon=True).start()
-        else:
-            self.hide_loading()
-            self.show_popup("Erro", "Plataforma não reconhecida")
 
 
 class CutScreen(Screen):
