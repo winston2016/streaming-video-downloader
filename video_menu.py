@@ -31,6 +31,7 @@ import webbrowser
 from kivy.uix.videoplayer import VideoPlayer
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.gridlayout import GridLayout
+from urllib.parse import urlparse
 import openai
 from dotenv import load_dotenv
 import whisper
@@ -312,7 +313,8 @@ class DownloadScreen(Screen):
     def _download_instagram(self, url):
         path = _get_platform_dir("instagram")
         loader = instaloader.Instaloader(dirname_pattern=path, filename_pattern="{shortcode}")
-        media_id = url.rstrip("/").split("/")[-1]
+        parsed = urlparse(url)
+        media_id = parsed.path.strip("/").split("/")[-1]
         post = instaloader.Post.from_shortcode(loader.context, media_id)
         loader.download_post(post, target="post")
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
