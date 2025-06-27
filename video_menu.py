@@ -400,8 +400,6 @@ class CutScreen(Screen):
             self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
             self._loading.add_widget(layout)
         self._loading.open()
-
-        self.show_loading()
     def hide_loading(self, *_):
         if self._loading is not None:
             self._loading.dismiss()
