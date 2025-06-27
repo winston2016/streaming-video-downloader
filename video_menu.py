@@ -27,7 +27,8 @@ from kivy.clock import Clock, mainthread
 from kivy.utils import platform
 import webbrowser
 from kivy.uix.videoplayer import VideoPlayer
-from kivy.uix.slider import Slider
+from kivy.uix.checkbox import CheckBox
+from kivy.uix.gridlayout import GridLayout
 import openai
 from dotenv import load_dotenv
 
@@ -43,7 +44,7 @@ logging.basicConfig(
 
 import yt_dlp
 import instaloader
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 from PIL import Image
 
 # Pillow >=10 removed the Image.ANTIALIAS constant used by MoviePy.
@@ -524,10 +525,17 @@ class AutoCutScreen(Screen):
         super().__init__(**kwargs)
         self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
         self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
-        self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
+        self.niche_input = TextInput(
+            text="Melhores lances de futebol",
+            hint_text="Nicho/tema",
+            size_hint_y=None,
+            height=40,
+        )
         self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
         self._loading = None
+        self.cut_counter = 1
+        self.generated_cuts = []
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_video = Button(text="Selecionar Vídeo")
@@ -545,6 +553,9 @@ class AutoCutScreen(Screen):
         layout.add_widget(btn_analyze)
         layout.add_widget(Label(text="Sugestões:"))
         layout.add_widget(self.suggestions_box)
+        btn_merge = Button(text="Mesclar Cortes", size_hint_y=None, height=40)
+        btn_merge.bind(on_press=self.merge_cuts)
+        layout.add_widget(btn_merge)
         back = Button(text="Voltar", size_hint_y=None, height=40)
         back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
         layout.add_widget(back)
@@ -583,7 +594,9 @@ class AutoCutScreen(Screen):
             text = resp.text if hasattr(resp, "text") else resp["text"]
             Clock.schedule_once(lambda *_: self.update_progress(50))
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(
+                lambda *_, e=exc: self.show_popup("Erro", str(e))
+            )
             return
         Clock.schedule_once(lambda *_: setattr(self.transcript_input, "text", text))
         Clock.schedule_once(lambda *_: self.update_progress(100))
@@ -610,8 +623,11 @@ class AutoCutScreen(Screen):
         self.show_loading()
         openai.api_key = key
         prompt = (
-            "Sugira até 3 cortes interessantes no formato HH:MM:SS-HH:MM:SS "
-            "baseado no nicho '" + self.niche_input.text + "'.\n" + self.transcript_input.text
+            "Sugira cortes interessantes no formato HH:MM:SS-HH:MM:SS "
+            "baseados no nicho '"
+            + self.niche_input.text
+            + "'. Use quantos cortes forem relevantes.\n"
+            + self.transcript_input.text
         )
         try:
             completion = openai.chat.completions.create(
@@ -634,8 +650,8 @@ class AutoCutScreen(Screen):
         import re
         self.suggestions_box.clear_widgets()
         lines = re.findall(r"(\d{2}:\d{2}:\d{2}).*(\d{2}:\d{2}:\d{2})", text)
-        for start, end in lines:
-            btn = Button(text=f"{start} - {end}", size_hint_y=None, height=40)
+        for idx, (start, end) in enumerate(lines, start=1):
+            btn = Button(text=f"{idx}. {start} - {end}", size_hint_y=None, height=40)
             btn.bind(on_press=lambda _btn, s=start, e=end: self.preview_segment(s, e))
             self.suggestions_box.add_widget(btn)
 
@@ -711,9 +727,10 @@ class AutoCutScreen(Screen):
         start_str = seconds_to_hms(start)
         end_str = seconds_to_hms(end)
         out_dir = _get_platform_dir("gpt")
+        original_name = os.path.basename(path)
         out_file = os.path.join(
             out_dir,
-            f"corte_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}.mp4",
+            f"corte_{self.cut_counter}_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}_{original_name}",
         )
         ext = os.path.splitext(out_file)[1].lower()
         if ext == ".webm":
@@ -724,9 +741,60 @@ class AutoCutScreen(Screen):
             audio_codec = "aac"
 
         clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
+        self.cut_counter += 1
+        self.generated_cuts.append(out_file)
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
         Clock.schedule_once(self.hide_loading)
         Clock.schedule_once(lambda *_: ask_upload({"youtube": out_file}))
+
+    def merge_cuts(self, *_):
+        if not self.generated_cuts:
+            self.show_popup("Aviso", "Nenhum corte para mesclar")
+            return
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        grid = GridLayout(cols=1, size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        checks = []
+        for path in self.generated_cuts:
+            row = BoxLayout(size_hint_y=None, height=40)
+            chk = CheckBox(active=True)
+            row.add_widget(chk)
+            row.add_widget(Label(text=os.path.basename(path)))
+            grid.add_widget(row)
+            checks.append((chk, path))
+        layout.add_widget(grid)
+        btn_merge = Button(text="Mesclar", size_hint_y=None, height=40)
+        btn_cancel = Button(text="Cancelar", size_hint_y=None, height=40)
+        row_btn = BoxLayout(size_hint_y=None, height=40)
+        row_btn.add_widget(btn_merge)
+        row_btn.add_widget(btn_cancel)
+        layout.add_widget(row_btn)
+        popup = Popup(title="Selecionar Cortes", content=layout, size_hint=(0.8, 0.8))
+
+        def do_merge(_):
+            popup.dismiss()
+            selected = [p for c, p in checks if c.active]
+            if selected:
+                threading.Thread(target=self._merge_files, args=(selected,), daemon=True).start()
+
+        btn_merge.bind(on_press=do_merge)
+        btn_cancel.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def _merge_files(self, paths):
+        try:
+            clips = [VideoFileClip(p) for p in paths]
+            final = concatenate_videoclips(clips)
+            out_dir = os.path.dirname(paths[0])
+            out_file = os.path.join(out_dir, f"merged_{datetime.now().strftime('%H-%M-%S')}.mp4")
+            final.write_videofile(out_file, codec="libx264", audio_codec="aac")
+            for clip in clips:
+                clip.close()
+            final.close()
+            Clock.schedule_once(lambda *_: self.show_popup("Sucesso", f"Mesclado em {out_file}"))
+        except Exception as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
