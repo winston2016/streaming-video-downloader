@@ -13,6 +13,8 @@ import threading
 import logging
 from pathlib import Path
 
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -450,7 +452,7 @@ class CutScreen(Screen):
             video_codec = "libvpx"
             audio_codec = "libvorbis"
         else:
-            video_codec = "libx264"
+            video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
         clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
@@ -776,7 +778,7 @@ class AutoCutScreen(Screen):
             video_codec = "libvpx"
             audio_codec = "libvorbis"
         else:
-            video_codec = "libx264"
+            video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
         clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
@@ -827,7 +829,7 @@ class AutoCutScreen(Screen):
             final = concatenate_videoclips(clips)
             out_dir = os.path.dirname(paths[0])
             out_file = os.path.join(out_dir, f"merged_{datetime.now().strftime('%H-%M-%S')}.mp4")
-            final.write_videofile(out_file, codec="libx264", audio_codec="aac")
+            final.write_videofile(out_file, codec=VIDEO_CODEC, audio_codec="aac")
             for clip in clips:
                 clip.close()
             final.close()

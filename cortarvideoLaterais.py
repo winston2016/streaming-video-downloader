@@ -3,6 +3,9 @@ from tkinter import filedialog, messagebox, ttk
 from moviepy.editor import VideoFileClip
 from moviepy.video.fx.all import crop
 from tqdm import tqdm
+import os
+
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
 class VideoCropperApp:
     def __init__(self, root):
@@ -62,7 +65,7 @@ class VideoCropperApp:
             self.root.update_idletasks()
 
         # Salve o vídeo cortado
-        cropped_video.write_videofile(self.output_video_path, codec="libx264")
+        cropped_video.write_videofile(self.output_video_path, codec=VIDEO_CODEC)
 
         messagebox.showinfo("Concluído", "O vídeo foi cortado e salvo com sucesso!")
         self.progress_label.config(text="Processo concluído!")

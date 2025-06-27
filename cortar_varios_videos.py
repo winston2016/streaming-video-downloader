@@ -4,6 +4,8 @@ from moviepy.editor import VideoFileClip
 import datetime
 import os
 
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
     if input_file:
@@ -40,7 +42,7 @@ def cortar_videos():
 
                 video = VideoFileClip(input_file).subclip(start_time, end_time)
                 output_file = os.path.join(pasta_saida, f"corte_{i}.mp4")
-                video.write_videofile(output_file, codec="libx264", audio_codec="aac")
+                video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao processar o intervalo '{intervalo}': {e}")
                 continue

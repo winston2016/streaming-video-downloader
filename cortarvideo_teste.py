@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from moviepy.editor import VideoFileClip
 import datetime
+import os
+
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
@@ -69,7 +72,7 @@ def cortar_video():
 
     try:
         video = VideoFileClip(input_file).subclip(start_time, end_time)
-        video.write_videofile(output_file, codec="libx264", audio_codec="aac")
+        video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
         messagebox.showinfo("Sucesso", f"Vídeo cortado salvo como {output_file}")
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao cortar o vídeo: {e}")

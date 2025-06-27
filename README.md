@@ -23,6 +23,9 @@ TIKTOK_PASSWORD=<senha>
 ```
 
 Essas informações são utilizadas pelos módulos de upload em `uploader/`.
+- Defina `VIDEO_HWACCEL=1` para habilitar exportação de vídeos utilizando um
+  codec de hardware (ex.: `h264_nvenc`). É necessário ter o FFmpeg compilado
+  com suporte à aceleração da GPU utilizada.
 - Transcrição automática agora utiliza a versão open-source do modelo `whisper`.
 
 Para utilizar a transcrição automática, instale os pacotes listados em `requirements.txt`, em especial o `openai-whisper`.
@@ -31,3 +34,5 @@ Para utilizar a transcrição automática, instale os pacotes listados em `requi
 
 - Os cortes gerados assumem as seguintes resoluções padronizadas: YouTube 1280x720 (16:9), TikTok 720x1280 (9:16) e Instagram Stories 1080x1920 (9:16).
 - Pré-visualização das sugestões com possibilidade de ajuste manual e salvamento do corte.
+- Para usar `VIDEO_HWACCEL`, o FFmpeg deve ser compilado com o codec
+  de aceleração correspondente (ex.: suporte ao NVENC para `h264_nvenc`).

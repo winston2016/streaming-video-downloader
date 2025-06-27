@@ -4,6 +4,9 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 import threading
 import numpy as np
+import os
+
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
 def resize_with_lanczos(image, new_size):
     pil_image = Image.fromarray(image)
@@ -56,7 +59,7 @@ def create_tiktok_video(video_top_path, video_bottom_path, output_path, audio_fr
             final_clip = final_clip.set_audio(video_bottom.audio)
 
         # Exportar vídeo final
-        final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
+        final_clip.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
 
         update_progress(100)
     except Exception as e:
