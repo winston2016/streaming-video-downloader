@@ -425,7 +425,15 @@ class CutScreen(Screen):
             base_dir, f"corte_{start_str}_{end_str}_{original_name}"
         )
 
-        clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+        ext = os.path.splitext(out_file)[1].lower()
+        if ext == ".webm":
+            video_codec = "libvpx"
+            audio_codec = "libvorbis"
+        else:
+            video_codec = "libx264"
+            audio_codec = "aac"
+
+        clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
 
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(
@@ -707,7 +715,15 @@ class AutoCutScreen(Screen):
             out_dir,
             f"corte_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}.mp4",
         )
-        clip.write_videofile(out_file, codec="libx264", audio_codec="aac")
+        ext = os.path.splitext(out_file)[1].lower()
+        if ext == ".webm":
+            video_codec = "libvpx"
+            audio_codec = "libvorbis"
+        else:
+            video_codec = "libx264"
+            audio_codec = "aac"
+
+        clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
         Clock.schedule_once(self.hide_loading)
         Clock.schedule_once(lambda *_: ask_upload({"youtube": out_file}))
