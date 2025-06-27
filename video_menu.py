@@ -113,26 +113,29 @@ class MyLogger:
         print(msg)
 
 
+def open_post_screen(path):
+    """Open the posting screen pre-filled with ``path``."""
+    app = App.get_running_app()
+    if not app:
+        return
+    try:
+        screen = app.root.get_screen("post")
+    except Exception:
+        return
+    screen.set_video(path)
+    app.root.current = "post"
+
+
 def ask_upload(paths):
-    layout = BoxLayout(orientation="vertical", padding=10)
-    layout.add_widget(Label(text="Cortes gerados. Postar automaticamente?"))
-    btn_yes = Button(text="Sim", size_hint_y=None, height=40)
-    btn_no = Button(text="Não", size_hint_y=None, height=40)
-    layout.add_widget(btn_yes)
-    layout.add_widget(btn_no)
-    popup = Popup(title="Postar", content=layout, size_hint=(0.75, 0.5))
-
-    def do_upload(_):
-        popup.dismiss()
-        threading.Thread(target=upload_videos, args=(paths,), daemon=True).start()
-
-    btn_yes.bind(on_press=do_upload)
-    btn_no.bind(on_press=popup.dismiss)
-    popup.open()
+    # Deprecated popup used in older flows. Now it simply opens the posting
+    # screen for the generated file.
+    path = next(iter(paths.values())) if paths else ""
+    open_post_screen(path)
 
 
-def upload_videos(paths):
-    from uploader import youtube, instagram, tiktok
+def upload_videos(paths, descriptions=None):
+    """Upload video to available platforms using provided descriptions."""
+    from uploader import youtube, instagram, tiktok, facebook, x
     if "youtube" in paths:
         try:
             youtube.upload_video(paths["youtube"], title="Corte")
@@ -140,7 +143,8 @@ def upload_videos(paths):
             print("YouTube upload failed:", exc)
     if "instagram" in paths:
         try:
-            instagram.upload_video(paths["instagram"], caption="Corte")
+            caption = "" if descriptions is None else descriptions.get("instagram", "")
+            instagram.upload_video(paths["instagram"], caption=caption)
         except Exception as exc:
             print("Instagram upload failed:", exc)
     if "tiktok" in paths:
@@ -148,6 +152,16 @@ def upload_videos(paths):
             tiktok.upload_video(paths["tiktok"])
         except Exception as exc:
             print("TikTok upload failed:", exc)
+    if "facebook" in paths:
+        try:
+            facebook.upload_video(paths["facebook"], description=descriptions.get("facebook", "") if descriptions else "")
+        except Exception as exc:
+            print("Facebook upload failed:", exc)
+    if "x" in paths:
+        try:
+            x.upload_video(paths["x"], description=descriptions.get("x", "") if descriptions else "")
+        except Exception as exc:
+            print("X upload failed:", exc)
 
 
 # Screens -----------------------------------------------------------------
@@ -224,6 +238,115 @@ class DownloadScreen(Screen):
         if self._loading is not None:
             self._loading.dismiss()
             self._loading = None
+
+    def show_popup(self, title, message):
+        popup_layout = BoxLayout(orientation="vertical", padding=10)
+        popup_layout.add_widget(Label(text=message))
+        btn = Button(text="Fechar", size_hint_y=None, height=40)
+        popup_layout.add_widget(btn)
+        popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
+        btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+
+class PostScreen(Screen):
+    """Screen for selecting a video and generating descriptions for posting."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
+        self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
+        self.tiktok_desc = TextInput(hint_text="Descrição TikTok", size_hint_y=None, height=80)
+        self.instagram_desc = TextInput(hint_text="Descrição Instagram", size_hint_y=None, height=80)
+        self.facebook_desc = TextInput(hint_text="Descrição Facebook", size_hint_y=None, height=80)
+        self.x_desc = TextInput(hint_text="Descrição X", size_hint_y=None, height=80)
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        btn_video = Button(text="Selecionar Vídeo")
+        btn_video.bind(on_press=self.choose_file)
+        layout.add_widget(btn_video)
+        layout.add_widget(self.file_path)
+        layout.add_widget(self.niche_input)
+        btn_gen = Button(text="Gerar Descrições", size_hint_y=None, height=40)
+        btn_gen.bind(on_press=self.generate_descriptions)
+        layout.add_widget(btn_gen)
+        layout.add_widget(self.tiktok_desc)
+        layout.add_widget(self.instagram_desc)
+        layout.add_widget(self.facebook_desc)
+        layout.add_widget(self.x_desc)
+        btn_post = Button(text="Postar", size_hint_y=None, height=40)
+        btn_post.bind(on_press=self.post_video)
+        layout.add_widget(btn_post)
+        back = Button(text="Voltar", size_hint_y=None, height=40)
+        back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
+        layout.add_widget(back)
+        self.add_widget(layout)
+
+    def set_video(self, path):
+        self.file_path.text = path
+
+    def choose_file(self, *_):
+        if filedialog is None:
+            return
+        root = Tk(); root.withdraw()
+        path = filedialog.askopenfilename(title="Selecione o vídeo")
+        root.destroy()
+        if path:
+            self.file_path.text = path
+
+    def generate_descriptions(self, *_):
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            self.show_popup("Erro", "Configure a chave da API")
+            return
+        if not self.niche_input.text.strip():
+            self.show_popup("Erro", "Informe o nicho/tema")
+            return
+        openai.api_key = key
+        prompt = (
+            "Crie descrições curtas e engajantes para um vídeo sobre '"
+            + self.niche_input.text.strip()
+            + "'. Use o que está em alta no momento.\n"
+            "Responda no formato:\n"
+            "TikTok: ...\nInstagram: ...\nFacebook: ...\nX: ..."
+        )
+        try:
+            completion = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+            )
+            text = completion.choices[0].message.content
+        except Exception as exc:
+            self.show_popup("Erro", str(exc))
+            return
+        for line in text.splitlines():
+            if line.lower().startswith("tiktok:"):
+                self.tiktok_desc.text = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("instagram:"):
+                self.instagram_desc.text = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("facebook:"):
+                self.facebook_desc.text = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("x:"):
+                self.x_desc.text = line.split(":", 1)[1].strip()
+
+    def post_video(self, *_):
+        path = self.file_path.text
+        if not path:
+            self.show_popup("Erro", "Selecione o vídeo")
+            return
+        descriptions = {
+            "tiktok": self.tiktok_desc.text,
+            "instagram": self.instagram_desc.text,
+            "facebook": self.facebook_desc.text,
+            "x": self.x_desc.text,
+        }
+        paths = {k: path for k, v in descriptions.items() if v}
+        if not paths:
+            self.show_popup("Aviso", "Nenhuma plataforma selecionada")
+            return
+        threading.Thread(target=upload_videos, args=(paths, descriptions), daemon=True).start()
+        self.show_popup("Info", "Upload iniciado")
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
@@ -727,7 +850,8 @@ class AutoCutScreen(Screen):
         btn_cancel.bind(on_press=popup.dismiss)
         btn_save.bind(on_press=lambda *_: self.save_preview_cut(path))
         popup.open()
-        self.preview_popup = popup
+
+
 
     def _stop_at_end(self, player, position, end):
         if position >= end:
@@ -787,7 +911,7 @@ class AutoCutScreen(Screen):
         self.generated_cuts.append(out_file)
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
         Clock.schedule_once(self.hide_loading)
-        Clock.schedule_once(lambda *_: ask_upload({"youtube": out_file}))
+        Clock.schedule_once(lambda *_: open_post_screen(out_file))
 
     def merge_cuts(self, *_):
         if not self.generated_cuts:
@@ -857,6 +981,7 @@ class VideoApp(App):
         sm.add_widget(DownloadScreen(name="download"))
         sm.add_widget(CutScreen(name="cut"))
         sm.add_widget(AutoCutScreen(name="auto"))
+        sm.add_widget(PostScreen(name="post"))
         sm.add_widget(ConfigScreen(name="config"))
         return sm
 
