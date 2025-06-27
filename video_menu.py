@@ -701,7 +701,8 @@ class AutoCutScreen(Screen):
         self.slider_end = Slider(min=0, max=duration, value=end)
         self.slider_start.bind(value=lambda _, v: setattr(self.preview_start, 'text', seconds_to_hms(v)))
         self.slider_end.bind(value=lambda _, v: setattr(self.preview_end, 'text', seconds_to_hms(v)))
-        video = VideoPlayer(source=path, state='play')
+        # Use an absolute URI to improve cross-platform compatibility
+        video = VideoPlayer(source=Path(path).absolute().as_uri(), state='play')
         video.position = start
         video.bind(position=lambda inst, val: self._stop_at_end(inst, val, end))
         layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
