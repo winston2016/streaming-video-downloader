@@ -620,7 +620,7 @@ class AutoCutScreen(Screen):
     def _generate_thread(self, path: str):
         try:
             model = whisper.load_model("base")
-            result = model.transcribe(path)
+            result = model.transcribe(path, fp16=False)
             transcript = result.get("text", "")
             Clock.schedule_once(lambda *_: self.update_progress(50))
 
