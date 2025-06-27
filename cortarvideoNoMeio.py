@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from moviepy.editor import VideoFileClip, vfx
+import os
+
+VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
@@ -29,8 +32,8 @@ def cortar_verticalmente():
         video_esquerda = video.crop(x1=0, y1=0, x2=metade_largura, y2=height)
         video_direita = video.crop(x1=metade_largura, y1=0, x2=width, y2=height)
 
-        video_esquerda.write_videofile(output_file_esquerda, codec="libx264", audio_codec="aac")
-        video_direita.write_videofile(output_file_direita, codec="libx264", audio_codec="aac")
+        video_esquerda.write_videofile(output_file_esquerda, codec=VIDEO_CODEC, audio_codec="aac")
+        video_direita.write_videofile(output_file_direita, codec=VIDEO_CODEC, audio_codec="aac")
 
         messagebox.showinfo("Sucesso", f"Vídeos cortados salvos como {output_file_esquerda} e {output_file_direita}")
     except Exception as e:
