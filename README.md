@@ -20,7 +20,13 @@ INSTAGRAM_USER=<usuario>
 INSTAGRAM_PASSWORD=<senha>
 TIKTOK_USER=<usuario>
 TIKTOK_PASSWORD=<senha>
+# Opcional: cookies para baixar vídeos privados do TikTok
+TIKTOK_COOKIES_FILE=<caminho para cookies.txt>
+TIKTOK_COOKIES_BROWSER=<navegador ou navegador:perfil>
 ```
+
+Defina `TIKTOK_COOKIES_FILE` ou `TIKTOK_COOKIES_BROWSER` caso o TikTok
+exija autenticação para baixar o vídeo.
 
 Essas informações são utilizadas pelos módulos de upload em `uploader/`.
 - Defina `VIDEO_HWACCEL=1` para habilitar exportação de vídeos utilizando um

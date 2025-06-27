@@ -292,8 +292,21 @@ class DownloadScreen(Screen):
             "logger": MyLogger(),
             "progress_hooks": [self._hook],
         }
+        cookie_file = os.getenv("TIKTOK_COOKIES_FILE")
+        cookie_browser = os.getenv("TIKTOK_COOKIES_BROWSER")
+        if cookie_file:
+            opts["cookiefile"] = cookie_file
+        elif cookie_browser:
+            opts["cookiesfrombrowser"] = cookie_browser
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
+            try:
+                ydl.download([url])
+            except yt_dlp.utils.DownloadError as exc:
+                msg = str(exc)
+                if "login" in msg.lower():
+                    msg += "\nDefina TIKTOK_COOKIES_FILE ou TIKTOK_COOKIES_BROWSER no .env"
+                Clock.schedule_once(lambda *_: self.show_popup("Erro", msg))
+                return
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
 
     def _download_instagram(self, url):
