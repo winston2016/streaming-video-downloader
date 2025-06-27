@@ -416,7 +416,7 @@ class CutScreen(Screen):
         try:
             clip = VideoFileClip(path)
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
             Clock.schedule_once(self.hide_loading)
             return
 
@@ -644,7 +644,7 @@ class AutoCutScreen(Screen):
             logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
         except Exception as exc:
             logging.exception("OpenAI request failed")
-            Clock.schedule_once(lambda *_: self._generate_failed(exc))
+            Clock.schedule_once(lambda *_, exc=exc: self._generate_failed(exc))
             return
         Clock.schedule_once(lambda *_: self._generate_done(text))
 
@@ -746,7 +746,7 @@ class AutoCutScreen(Screen):
         try:
             clip = VideoFileClip(path)
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
             Clock.schedule_once(self.hide_loading)
             return
 
@@ -832,7 +832,7 @@ class AutoCutScreen(Screen):
             final.close()
             Clock.schedule_once(lambda *_: self.show_popup("Sucesso", f"Mesclado em {out_file}"))
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
 
     def show_popup(self, title, message):
         popup_layout = BoxLayout(orientation="vertical", padding=10)
