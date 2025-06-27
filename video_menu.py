@@ -32,6 +32,7 @@ from kivy.uix.videoplayer import VideoPlayer
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.gridlayout import GridLayout
 from urllib.parse import urlparse
+import re
 import openai
 from dotenv import load_dotenv
 import whisper
@@ -101,6 +102,25 @@ def seconds_to_hms(value: float) -> str:
     m = (total % 3600) // 60
     s = total % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def extract_instagram_shortcode(url: str) -> str:
+    """Return the shortcode from an Instagram URL.
+
+    Raises ``ValueError`` if no shortcode can be determined.
+    """
+    parsed = urlparse(url)
+    path = parsed.path.strip("/")
+    if not path:
+        raise ValueError("URL inválida")
+    shortcode = path.split("/")[-1]
+    if not shortcode or shortcode.startswith("?"):
+        raise ValueError("URL inválida")
+    # remove any possible trailing parameters
+    shortcode = re.split(r"[/?#]", shortcode)[0]
+    if not shortcode:
+        raise ValueError("URL inválida")
+    return shortcode
 
 
 class MyLogger:
@@ -313,10 +333,17 @@ class DownloadScreen(Screen):
     def _download_instagram(self, url):
         path = _get_platform_dir("instagram")
         loader = instaloader.Instaloader(dirname_pattern=path, filename_pattern="{shortcode}")
-        parsed = urlparse(url)
-        media_id = parsed.path.strip("/").split("/")[-1]
-        post = instaloader.Post.from_shortcode(loader.context, media_id)
-        loader.download_post(post, target="post")
+        try:
+            shortcode = extract_instagram_shortcode(url)
+        except ValueError as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            return
+        try:
+            post = instaloader.Post.from_shortcode(loader.context, shortcode)
+            loader.download_post(post, target="post")
+        except Exception as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", f"Falha no download: {exc}"))
+            return
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
 
     def start_download(self, *_):
