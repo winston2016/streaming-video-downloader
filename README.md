@@ -23,9 +23,9 @@ TIKTOK_PASSWORD=<senha>
 ```
 
 Essas informações são utilizadas pelos módulos de upload em `uploader/`.
-- Transcrição automática de vídeos usando o modelo `whisper` da OpenAI.
+- Transcrição automática agora utiliza a versão open-source do modelo `whisper`.
 
-Para utilizar a transcrição automática, instale os pacotes listados em `requirements.txt`, em especial o `openai`.
+Para utilizar a transcrição automática, instale os pacotes listados em `requirements.txt`, em especial o `openai-whisper`.
 
 ## Notas
 

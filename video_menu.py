@@ -31,6 +31,7 @@ from kivy.uix.checkbox import CheckBox
 from kivy.uix.gridlayout import GridLayout
 import openai
 from dotenv import load_dotenv
+import whisper
 
 load_dotenv()
 
@@ -616,9 +617,9 @@ class AutoCutScreen(Screen):
 
     def _generate_thread(self, path: str):
         try:
-            with open(path, "rb") as f:
-                resp = openai.audio.transcriptions.create(file=f, model="whisper-1")
-            transcript = resp.text if hasattr(resp, "text") else resp["text"]
+            model = whisper.load_model("base")
+            result = model.transcribe(path)
+            transcript = result.get("text", "")
             Clock.schedule_once(lambda *_: self.update_progress(50))
 
             clip = VideoFileClip(path)
