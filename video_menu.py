@@ -413,7 +413,25 @@ class CutScreen(Screen):
             self._loading = None
 
     def _cut_video(self, path, start, end):
-        clip = VideoFileClip(path).subclip(start, end)
+        try:
+            clip = VideoFileClip(path)
+        except Exception as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(self.hide_loading)
+            return
+
+        duration = clip.duration
+        if start >= end or start < 0 or end > duration:
+            clip.close()
+            Clock.schedule_once(
+                lambda *_: self.show_popup(
+                    "Erro", "Tempos fora da duração do vídeo"
+                )
+            )
+            Clock.schedule_once(self.hide_loading)
+            return
+
+        clip = clip.subclip(start, end)
 
         # Keep the original resolution and store the cut alongside the source
         # video. The output file name includes the selected time span and the
@@ -669,9 +687,18 @@ class AutoCutScreen(Screen):
         self.show_preview(path, start, end)
 
     def show_preview(self, path, start, end):
-        clip = VideoFileClip(path)
+        try:
+            clip = VideoFileClip(path)
+        except Exception as exc:
+            self.show_popup("Erro", str(exc))
+            return
+
         duration = clip.duration
         clip.close()
+
+        if start >= end or start < 0 or end > duration:
+            self.show_popup("Erro", "Tempos fora da duração do vídeo")
+            return
         self.preview_start = TextInput(text=seconds_to_hms(start), size_hint_y=None, height=40)
         self.preview_end = TextInput(text=seconds_to_hms(end), size_hint_y=None, height=40)
         self.slider_start = Slider(min=0, max=duration, value=start)
@@ -723,7 +750,25 @@ class AutoCutScreen(Screen):
         self.preview_segment(start_str, end_str)
 
     def _cut_video(self, path, start, end):
-        clip = VideoFileClip(path).subclip(start, end)
+        try:
+            clip = VideoFileClip(path)
+        except Exception as exc:
+            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(self.hide_loading)
+            return
+
+        duration = clip.duration
+        if start >= end or start < 0 or end > duration:
+            clip.close()
+            Clock.schedule_once(
+                lambda *_: self.show_popup(
+                    "Erro", "Tempos fora da duração do vídeo"
+                )
+            )
+            Clock.schedule_once(self.hide_loading)
+            return
+
+        clip = clip.subclip(start, end)
         start_str = seconds_to_hms(start)
         end_str = seconds_to_hms(end)
         out_dir = _get_platform_dir("gpt")
