@@ -44,6 +44,12 @@ logging.basicConfig(
 import yt_dlp
 import instaloader
 from moviepy.editor import VideoFileClip
+from PIL import Image
+
+# Pillow >=10 removed the Image.ANTIALIAS constant used by MoviePy.
+# Provide a fallback for compatibility with older MoviePy versions.
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
 
 try:
     from tkinter import filedialog, Tk
