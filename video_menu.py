@@ -524,7 +524,12 @@ class AutoCutScreen(Screen):
         super().__init__(**kwargs)
         self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
         self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
-        self.niche_input = TextInput(hint_text="Nicho/tema", size_hint_y=None, height=40)
+        self.niche_input = TextInput(
+            text="Melhores lances de futebol",
+            hint_text="Nicho/tema",
+            size_hint_y=None,
+            height=40,
+        )
         self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
         self.progress = ProgressBar(max=100, size_hint_y=None, height=30)
         self._loading = None
@@ -583,7 +588,9 @@ class AutoCutScreen(Screen):
             text = resp.text if hasattr(resp, "text") else resp["text"]
             Clock.schedule_once(lambda *_: self.update_progress(50))
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(
+                lambda *_, e=exc: self.show_popup("Erro", str(e))
+            )
             return
         Clock.schedule_once(lambda *_: setattr(self.transcript_input, "text", text))
         Clock.schedule_once(lambda *_: self.update_progress(100))
