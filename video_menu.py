@@ -213,6 +213,7 @@ class DownloadScreen(Screen):
         layout.add_widget(Label(text="URL do vídeo:"))
         layout.add_widget(self.url_input)
         btn = Button(text="Baixar", size_hint_y=None, height=40)
+        self.start_download = self._start_download
         btn.bind(on_press=self.start_download)
         layout.add_widget(btn)
         layout.add_widget(self.progress)
@@ -413,7 +414,7 @@ class PostScreen(Screen):
         loader.download_post(post, target="post")
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Download concluído"))
 
-    def start_download(self, *_):
+    def _start_download(self, *_):
         self.progress.value = 0
         self.show_loading()
         url = self.url_input.text
