@@ -415,7 +415,7 @@ class CutScreen(Screen):
         for platform, new_size in sizes.items():
             out_dir = _get_platform_dir(platform)
             out_file = os.path.join(out_dir, f"corte_{platform}.mp4")
-            resized = clip.resize(new_size=new_size)
+            resized = clip.resize(newsize=new_size)
             resized.write_videofile(out_file, codec="libx264", audio_codec="aac")
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Cortes gerados"))
