@@ -212,7 +212,7 @@ class DownloadScreen(Screen):
     def show_loading(self):
         if self._loading is None:
             layout = BoxLayout(orientation="vertical", padding=10)
-            layout.add_widget(Label(text="Carregando..."))
+            layout.add_widget(Label(text="Aguarde..."))
             self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
             self._loading.add_widget(layout)
         self._loading.open()
@@ -403,7 +403,7 @@ class CutScreen(Screen):
     def show_loading(self):
         if self._loading is None:
             layout = BoxLayout(orientation="vertical", padding=10)
-            layout.add_widget(Label(text="Carregando..."))
+            layout.add_widget(Label(text="Aguarde..."))
             self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
             self._loading.add_widget(layout)
         self._loading.open()
@@ -542,7 +542,6 @@ class AutoCutScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.file_path = TextInput(hint_text="Caminho do vídeo", readonly=True, size_hint_y=None, height=40)
-        self.transcript_input = TextInput(hint_text="Transcrição do vídeo", size_hint=(1, 0.4))
         self.niche_input = TextInput(
             text="Melhores lances de futebol",
             hint_text="Nicho/tema",
@@ -560,11 +559,7 @@ class AutoCutScreen(Screen):
         btn_video.bind(on_press=self.choose_file)
         layout.add_widget(btn_video)
         layout.add_widget(self.file_path)
-        btn_transcribe = Button(text="Transcrever", size_hint_y=None, height=40)
-        btn_transcribe.bind(on_press=self.transcribe)
-        layout.add_widget(btn_transcribe)
         layout.add_widget(self.progress)
-        layout.add_widget(self.transcript_input)
         layout.add_widget(self.niche_input)
         btn_analyze = Button(text="Gerar Sugestões", size_hint_y=None, height=40)
         btn_analyze.bind(on_press=self.generate)
@@ -588,42 +583,15 @@ class AutoCutScreen(Screen):
         if path:
             self.file_path.text = path
 
-    def transcribe(self, *_):
-        path = self.file_path.text
-        if not path:
-            self.show_popup("Erro", "Selecione o vídeo")
-            return
-        key = os.getenv("OPENAI_API_KEY")
-        if not key:
-            self.show_popup("Erro", "Configure a chave da API")
-            return
-        openai.api_key = key
-        self.update_progress(10)
-        threading.Thread(target=self._transcribe, args=(path,), daemon=True).start()
-
     @mainthread
     def update_progress(self, value):
         self.progress.value = value
-
-    def _transcribe(self, path: str):
-        try:
-            with open(path, "rb") as f:
-                resp = openai.audio.transcriptions.create(file=f, model="whisper-1")
-            text = resp.text if hasattr(resp, "text") else resp["text"]
-            Clock.schedule_once(lambda *_: self.update_progress(50))
-        except Exception as exc:
-            Clock.schedule_once(
-                lambda *_, e=exc: self.show_popup("Erro", str(e))
-            )
-            return
-        Clock.schedule_once(lambda *_: setattr(self.transcript_input, "text", text))
-        Clock.schedule_once(lambda *_: self.update_progress(100))
 
     # Loading helpers -----------------------------------------------------
     def show_loading(self):
         if self._loading is None:
             layout = BoxLayout(orientation="vertical", padding=10)
-            layout.add_widget(Label(text="Carregando..."))
+            layout.add_widget(Label(text="Aguarde..."))
             self._loading = ModalView(size_hint=(0.5, 0.3), auto_dismiss=False)
             self._loading.add_widget(layout)
         self._loading.open()
@@ -638,16 +606,35 @@ class AutoCutScreen(Screen):
         if not key:
             self.show_popup("Erro", "Configure a chave da API")
             return
+        path = self.file_path.text
+        if not path:
+            self.show_popup("Erro", "Selecione o vídeo")
+            return
         self.show_loading()
         openai.api_key = key
-        prompt = (
-            "Sugira cortes interessantes no formato HH:MM:SS-HH:MM:SS "
-            "baseados no nicho '"
-            + self.niche_input.text
-            + "'. Use quantos cortes forem relevantes.\n"
-            + self.transcript_input.text
-        )
+        threading.Thread(target=self._generate_thread, args=(path,), daemon=True).start()
+
+    def _generate_thread(self, path: str):
         try:
+            with open(path, "rb") as f:
+                resp = openai.audio.transcriptions.create(file=f, model="whisper-1")
+            transcript = resp.text if hasattr(resp, "text") else resp["text"]
+            Clock.schedule_once(lambda *_: self.update_progress(50))
+
+            clip = VideoFileClip(path)
+            duration = seconds_to_hms(clip.duration)
+            clip.close()
+
+            prompt = (
+                "Sugira cortes interessantes no formato HH:MM:SS-HH:MM:SS "
+                "baseados no nicho '"
+                + self.niche_input.text
+                + "'. O vídeo tem duração "
+                + duration
+                + ". Use quantos cortes forem relevantes.\n"
+                + transcript
+            )
+
             completion = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
@@ -656,12 +643,18 @@ class AutoCutScreen(Screen):
             text = completion.choices[0].message.content
             logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
         except Exception as exc:
-            self.hide_loading()
-            self.show_popup("Erro", str(exc))
-            logging.exception("OpenAI request failed for prompt:\n%s", prompt)
-            self.show_popup("Erro", f"{exc.__class__.__name__}: {exc}")
+            logging.exception("OpenAI request failed")
+            Clock.schedule_once(lambda *_: self._generate_failed(exc))
             return
+        Clock.schedule_once(lambda *_: self._generate_done(text))
+
+    def _generate_failed(self, exc):
         self.hide_loading()
+        self.show_popup("Erro", str(exc))
+
+    def _generate_done(self, text):
+        self.hide_loading()
+        self.update_progress(100)
         self.show_suggestions(text)
 
     def show_suggestions(self, text):
