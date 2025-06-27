@@ -31,3 +31,18 @@ Para utilizar a transcrição automática, instale os pacotes listados em `requi
 
 - Os cortes gerados assumem as seguintes resoluções padronizadas: YouTube 1280x720 (16:9), TikTok 720x1280 (9:16) e Instagram Stories 1080x1920 (9:16).
 - Pré-visualização das sugestões com possibilidade de ajuste manual e salvamento do corte.
+
+## Desempenho de codificação de vídeo
+
+Os scripts utilizam o MoviePy para gerar os cortes. Por padrão o MoviePy
+emprega codecs de CPU fornecidos pelo FFmpeg, o que pode tornar a exportação
+mais lenta. Caso a sua instalação do FFmpeg tenha sido compilada com suporte a
+NVENC, VAAPI ou tecnologias similares, é possível habilitar a codificação via
+GPU definindo a variável de ambiente `VIDEO_HWACCEL=1` antes da execução.
+
+```bash
+export VIDEO_HWACCEL=1
+python cortarvideo.py
+```
+
+Sem esse flag os vídeos continuam sendo processados somente pela CPU.
