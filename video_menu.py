@@ -783,6 +783,7 @@ class AutoCutScreen(Screen):
         self._loading = None
         self.cut_counter = 1
         self.generated_cuts = []
+        self.current_suggestions = []
 
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         btn_video = Button(text="Selecionar Vídeo")
@@ -903,29 +904,47 @@ class AutoCutScreen(Screen):
         self.show_suggestions(suggestions)
 
     def show_suggestions(self, suggestions):
+        """Display buttons for each suggestion and store their metadata."""
         self.suggestions_box.clear_widgets()
+        self.current_suggestions = []
         for idx, item in enumerate(suggestions, start=1):
-            title = item.get("title", f"{item['start']} - {item['end']}")
-            start = item["start"]
-            end = item["end"]
-            desc = item.get("description", "")
-            text = f"{idx}. {title}" if not desc else f"{idx}. {title} - {desc}"
-            btn = Button(text=text, size_hint_y=None, height=40)
-            btn.bind(on_press=lambda _btn, s=start, e=end: self.preview_segment(s, e))
+            start_raw = item.get("start")
+            end_raw = item.get("end")
+            try:
+                start_sec = float(start_raw)
+                end_sec = float(end_raw)
+            except (TypeError, ValueError):
+                start_sec = hms_to_seconds(str(start_raw))
+                end_sec = hms_to_seconds(str(end_raw))
+            btn = Button(
+                text=f"{idx}. {start_raw} - {end_raw}",
+                size_hint_y=None,
+                height=40,
+            )
+            btn.bind(on_press=lambda _btn, s=start_sec, e=end_sec: self.preview_segment(s, e))
             self.suggestions_box.add_widget(btn)
+            self.current_suggestions.append(
+                {
+                    "start": start_sec,
+                    "end": end_sec,
+                    "title": item.get("title", ""),
+                    "description": item.get("description", ""),
+                }
+            )
 
-    def preview_segment(self, start_str, end_str):
+    def preview_segment(self, start, end):
+        """Open the preview popup for the selected time span."""
         path = self.file_path.text
         if not path:
             self.show_popup("Erro", "Selecione o vídeo")
             return
         try:
-            start = hms_to_seconds(start_str)
-            end = hms_to_seconds(end_str)
-        except ValueError:
+            start_sec = float(start)
+            end_sec = float(end)
+        except (TypeError, ValueError):
             self.show_popup("Erro", "Tempos inválidos")
             return
-        self.show_preview(path, start, end)
+        self.show_preview(path, start_sec, end_sec)
 
     def show_preview(self, path, start, end):
         try:
@@ -990,8 +1009,8 @@ class AutoCutScreen(Screen):
         self.preview_popup.dismiss()
         threading.Thread(target=self._cut_video, args=(path, start, end), daemon=True).start()
 
-    def cut_segment(self, start_str, end_str):
-        self.preview_segment(start_str, end_str)
+    def cut_segment(self, start, end):
+        self.preview_segment(start, end)
 
     def _cut_video(self, path, start, end):
         try:
@@ -1148,13 +1167,23 @@ class SuggestionsScreen(Screen):
     def preview(self, path, start, end):
         auto = self.manager.get_screen("auto")
         auto.file_path.text = path
-        auto.preview_segment(start, end)
+        try:
+            s = float(start)
+            e = float(end)
+        except (TypeError, ValueError):
+            s = hms_to_seconds(str(start))
+            e = hms_to_seconds(str(end))
+        auto.preview_segment(s, e)
 
     def cut(self, path, start, end):
         auto = self.manager.get_screen("auto")
         auto.show_loading()
-        s = hms_to_seconds(start)
-        e = hms_to_seconds(end)
+        try:
+            s = float(start)
+            e = float(end)
+        except (TypeError, ValueError):
+            s = hms_to_seconds(str(start))
+            e = hms_to_seconds(str(end))
         threading.Thread(target=auto._cut_video, args=(path, s, e), daemon=True).start()
 # App ---------------------------------------------------------------------
 
