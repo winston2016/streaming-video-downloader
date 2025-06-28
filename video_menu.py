@@ -857,7 +857,8 @@ class AutoCutScreen(Screen):
             Clock.schedule_once(lambda *_: self.update_progress(50))
 
             clip = VideoFileClip(path)
-            duration = seconds_to_hms(clip.duration)
+            duration_sec = clip.duration
+            duration = seconds_to_hms(duration_sec)
             clip.close()
 
             prompt = (
@@ -891,11 +892,28 @@ class AutoCutScreen(Screen):
                     f"Resposta do modelo incompleta (finish_reason={finish_reason})"
                 )
             try:
-                suggestions = json.loads(text)
+                raw_suggestions = json.loads(text)
             except Exception as exc:
                 logging.exception("JSON parsing failed")
                 Clock.schedule_once(lambda *_, exc=exc: self._generate_failed(exc))
                 return
+
+            # Filter out suggestions that fall outside the clip duration
+            suggestions = []
+            for item in raw_suggestions:
+                start_raw = item.get("start")
+                end_raw = item.get("end")
+                try:
+                    start_sec = float(start_raw)
+                    end_sec = float(end_raw)
+                except (TypeError, ValueError):
+                    try:
+                        start_sec = hms_to_seconds(str(start_raw))
+                        end_sec = hms_to_seconds(str(end_raw))
+                    except Exception:
+                        continue
+                if 0 <= start_sec < end_sec <= duration_sec:
+                    suggestions.append(item)
             date_dir = Path("videos") / datetime.now().strftime("%Y-%m-%d")
             date_dir.mkdir(parents=True, exist_ok=True)
             with open(date_dir / "suggestions.json", "w", encoding="utf-8") as f:
