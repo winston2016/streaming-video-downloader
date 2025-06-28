@@ -43,6 +43,7 @@ def cortar_videos():
                 video = VideoFileClip(input_file).subclip(start_time, end_time)
                 output_file = os.path.join(pasta_saida, f"corte_{i}.mp4")
                 video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
+                video.close()
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao processar o intervalo '{intervalo}': {e}")
                 continue

@@ -60,6 +60,9 @@ def create_tiktok_video(video_top_path, video_bottom_path, output_path, audio_fr
 
         # Exportar vídeo final
         final_clip.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
+        final_clip.close()
+        video_top.close()
+        video_bottom.close()
 
         update_progress(100)
     except Exception as e:
