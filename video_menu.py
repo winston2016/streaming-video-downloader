@@ -867,6 +867,7 @@ class AutoCutScreen(Screen):
                 + duration
                 + ". Use quantos cortes forem relevantes.\n"
                 + transcript
+                + "\nReturn a JSON array of objects with `title`, `description`, `start`, `end`."
             )
 
             completion = openai.chat.completions.create(
@@ -876,11 +877,14 @@ class AutoCutScreen(Screen):
             )
             text = completion.choices[0].message.content
             logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
-            suggestions = parse_suggestions(text)
-            for item in suggestions:
-                item["original"] = os.path.basename(path)
-
-            date_dir = Path(_get_platform_dir("gpt"))
+            try:
+                suggestions = json.loads(text)
+            except Exception as exc:
+                logging.exception("JSON parsing failed")
+                Clock.schedule_once(lambda *_, exc=exc: self._generate_failed(exc))
+                return
+            date_dir = Path("videos") / datetime.now().strftime("%Y-%m-%d")
+            date_dir.mkdir(parents=True, exist_ok=True)
             with open(date_dir / "suggestions.json", "w", encoding="utf-8") as f:
                 json.dump({"file": path, "suggestions": suggestions}, f, ensure_ascii=False, indent=2)
         except Exception as exc:
