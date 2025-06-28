@@ -107,15 +107,36 @@ def seconds_to_hms(value: float) -> str:
 
 def parse_suggestions(text):
     """Parse ChatGPT response into a list of suggestions."""
+    try:
+        data = json.loads(text)
+    except Exception:
+        data = None
+
     suggestions = []
+    if isinstance(data, list):
+        for item in data:
+            suggestions.append(
+                {
+                    "title": item.get("title", ""),
+                    "description": item.get("description", ""),
+                    "start": item.get("start", ""),
+                    "end": item.get("end", ""),
+                }
+            )
+        if suggestions:
+            return suggestions
+
     for line in text.splitlines():
-        m = re.search(r"(\d{2}:\d{2}:\d{2}).*?(\d{2}:\d{2}:\d{2})(?:\s*-?\s*(.*))?", line)
+        m = re.search(
+            r"(\d{2}:\d{2}:\d{2}).*?(\d{2}:\d{2}:\d{2})(?:\s*-?\s*(.*))?",
+            line,
+        )
         if not m:
             continue
         start, end, title = m.group(1), m.group(2), (m.group(3) or "").strip()
         if not title:
             title = f"Corte {len(suggestions) + 1}"
-        suggestions.append({"start": start, "end": end, "title": title})
+        suggestions.append({"start": start, "end": end, "title": title, "description": ""})
     return suggestions
 
 
@@ -827,7 +848,11 @@ class AutoCutScreen(Screen):
         try:
             model = whisper.load_model("base")
             result = model.transcribe(path, fp16=False)
-            transcript = result.get("text", "")
+            segments = result["segments"]
+            transcript = "\n".join(
+                f"{seconds_to_hms(s['start'])}-{seconds_to_hms(s['end'])} {s['text'].strip()}"
+                for s in segments
+            )
             Clock.schedule_once(lambda *_: self.update_progress(50))
 
             clip = VideoFileClip(path)
@@ -835,8 +860,8 @@ class AutoCutScreen(Screen):
             clip.close()
 
             prompt = (
-                "Sugira cortes interessantes no formato HH:MM:SS-HH:MM:SS "
-                "baseados no nicho '"
+                "Sugira cortes interessantes no formato JSON com os campos "
+                "title, description, start e end, baseados no nicho '"
                 + self.niche_input.text
                 + "'. O vídeo tem duração "
                 + duration
@@ -883,7 +908,9 @@ class AutoCutScreen(Screen):
             title = item.get("title", f"{item['start']} - {item['end']}")
             start = item["start"]
             end = item["end"]
-            btn = Button(text=f"{idx}. {title}", size_hint_y=None, height=40)
+            desc = item.get("description", "")
+            text = f"{idx}. {title}" if not desc else f"{idx}. {title} - {desc}"
+            btn = Button(text=text, size_hint_y=None, height=40)
             btn.bind(on_press=lambda _btn, s=start, e=end: self.preview_segment(s, e))
             self.suggestions_box.add_widget(btn)
 
@@ -1092,7 +1119,7 @@ class SuggestionsScreen(Screen):
         if not root.exists():
             return
         for date_dir in sorted(root.iterdir()):
-            sug_file = date_dir / "suggestions.json"
+            sug_file = date_dir / "gpt" / "suggestions.json"
             if not sug_file.exists():
                 continue
             try:
@@ -1104,8 +1131,10 @@ class SuggestionsScreen(Screen):
             video_path = data.get("file", "")
             for item in data.get("suggestions", []):
                 title = item.get("title", f"{item['start']} - {item['end']}")
+                desc = item.get("description", "")
+                text = title if not desc else f"{title} - {desc}"
                 row = BoxLayout(size_hint_y=None, height=40)
-                row.add_widget(Label(text=title))
+                row.add_widget(Label(text=text))
                 btn_prev = Button(text="Prévia", size_hint_x=None, width=80)
                 btn_cut = Button(text="Cortar", size_hint_x=None, width=80)
                 start = item["start"]
