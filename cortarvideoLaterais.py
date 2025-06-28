@@ -1,11 +1,8 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from moviepy.editor import VideoFileClip
-from moviepy.video.fx.all import crop
-from tqdm import tqdm
-import os
 
-VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+from moviepy.editor import VideoFileClip
+from video_cut_utils import crop_sides
 
 class VideoCropperApp:
     def __init__(self, root):
@@ -46,28 +43,15 @@ class VideoCropperApp:
             self.crop_video()
 
     def crop_video(self):
-        # Carregue o vídeo
         video = VideoFileClip(self.input_video_path)
-        width, height = video.size
-
-        # Defina os valores para cortar as laterais
-        left = 200  # Substitua pelo valor desejado
-        right = width - 200  # Substitua pelo valor desejado
-
-        # Corte o vídeo
-        cropped_video = crop(video, x1=left, x2=right)
-
-        # Processamento com barra de progresso
-        total_frames = cropped_video.reader.nframes
-        self.progress_bar['maximum'] = total_frames
-        for frame in tqdm(range(total_frames), desc="Processando o vídeo"):
-            self.progress_bar['value'] = frame
-            self.root.update_idletasks()
-
-        # Salve o vídeo cortado
-        cropped_video.write_videofile(self.output_video_path, codec=VIDEO_CODEC)
-        cropped_video.close()
+        width, _ = video.size
+        left = 200
+        right = width - 200
         video.close()
+
+        self.progress_bar['maximum'] = 100
+        crop_sides(self.input_video_path, self.output_video_path, left, right)
+        self.progress_bar['value'] = 100
 
         messagebox.showinfo("Concluído", "O vídeo foi cortado e salvo com sucesso!")
         self.progress_label.config(text="Processo concluído!")

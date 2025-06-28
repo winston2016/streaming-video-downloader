@@ -1,9 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from moviepy.editor import VideoFileClip, vfx
-import os
-
-VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+from video_cut_utils import cut_vertical_halves
 
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
@@ -18,25 +15,18 @@ def cortar_verticalmente():
         return
 
     try:
-        video = VideoFileClip(input_file)
-        width, height = video.size
-        metade_largura = width // 2
-
-        output_file_esquerda = filedialog.asksaveasfilename(defaultextension=".mp4", title="Salvar parte esquerda como")
+        output_file_esquerda = filedialog.asksaveasfilename(
+            defaultextension=".mp4", title="Salvar parte esquerda como"
+        )
         if not output_file_esquerda:
             return
-        output_file_direita = filedialog.asksaveasfilename(defaultextension=".mp4", title="Salvar parte direita como")
+        output_file_direita = filedialog.asksaveasfilename(
+            defaultextension=".mp4", title="Salvar parte direita como"
+        )
         if not output_file_direita:
             return
 
-        video_esquerda = video.crop(x1=0, y1=0, x2=metade_largura, y2=height)
-        video_direita = video.crop(x1=metade_largura, y1=0, x2=width, y2=height)
-
-        video_esquerda.write_videofile(output_file_esquerda, codec=VIDEO_CODEC, audio_codec="aac")
-        video_direita.write_videofile(output_file_direita, codec=VIDEO_CODEC, audio_codec="aac")
-        video_esquerda.close()
-        video_direita.close()
-        video.close()
+        cut_vertical_halves(input_file, output_file_esquerda, output_file_direita)
 
         messagebox.showinfo("Sucesso", f"Vídeos cortados salvos como {output_file_esquerda} e {output_file_direita}")
     except Exception as e:

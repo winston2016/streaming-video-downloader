@@ -1,10 +1,12 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from moviepy.editor import VideoFileClip
-import datetime
-import os
 
-VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+from video_cut_utils import (
+    format_seconds,
+    parse_time,
+    cut_video,
+)
 
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
@@ -19,25 +21,19 @@ def escolher_video():
         end_slider.set(int(video.duration))
         atualizar_inputs()
 
-def converter_para_hms(segundos):
-    return str(datetime.timedelta(seconds=segundos))
-
-def converter_para_segundos(hms):
-    partes = hms.split(':')
-    return int(partes[0]) * 3600 + int(partes[1]) * 60 + int(partes[2])
 
 def atualizar_inputs(event=None):
     start = start_slider.get()
     end = end_slider.get()
     start_time_entry.delete(0, tk.END)
     end_time_entry.delete(0, tk.END)
-    start_time_entry.insert(0, converter_para_hms(start))
-    end_time_entry.insert(0, converter_para_hms(end))
+    start_time_entry.insert(0, format_seconds(start))
+    end_time_entry.insert(0, format_seconds(end))
 
 def atualizar_sliders(event=None):
     try:
-        start = converter_para_segundos(start_time_entry.get())
-        end = converter_para_segundos(end_time_entry.get())
+        start = parse_time(start_time_entry.get())
+        end = parse_time(end_time_entry.get())
         start_slider.set(start)
         end_slider.set(end)
     except ValueError:
@@ -45,10 +41,10 @@ def atualizar_sliders(event=None):
 
 def ajustar_tempo(entry, ajuste):
     try:
-        tempo_atual = converter_para_segundos(entry.get())
+        tempo_atual = parse_time(entry.get())
         tempo_novo = max(0, tempo_atual + ajuste)
         entry.delete(0, tk.END)
-        entry.insert(0, converter_para_hms(tempo_novo))
+        entry.insert(0, format_seconds(tempo_novo))
         atualizar_sliders()
     except ValueError:
         messagebox.showerror("Erro", "Por favor, insira tempos válidos no formato HH:MM:SS")
@@ -60,8 +56,8 @@ def cortar_video():
         return
 
     try:
-        start_time = converter_para_segundos(start_time_entry.get())
-        end_time = converter_para_segundos(end_time_entry.get())
+        start_time = parse_time(start_time_entry.get())
+        end_time = parse_time(end_time_entry.get())
     except ValueError:
         messagebox.showerror("Erro", "Por favor, insira tempos válidos no formato HH:MM:SS")
         return
@@ -71,9 +67,7 @@ def cortar_video():
         return
 
     try:
-        video = VideoFileClip(input_file).subclip(start_time, end_time)
-        video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
-        video.close()
+        cut_video(input_file, output_file, start_time, end_time)
         messagebox.showinfo("Sucesso", f"Vídeo cortado salvo como {output_file}")
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao cortar o vídeo: {e}")
