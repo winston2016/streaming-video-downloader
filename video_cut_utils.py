@@ -9,18 +9,23 @@ def format_seconds(seconds: int) -> str:
     """Return time formatted as HH:MM:SS."""
     return str(datetime.timedelta(seconds=int(seconds)))
 
-def parse_time(hms: str) -> int:
-    """Return seconds from an HH:MM:SS string."""
-    parts = hms.split(":")
+def parse_time(hms: str) -> float:
+    """Return seconds from an ``HH:MM:SS`` string.
+
+    Supports fractional seconds in the ``SS`` component.
+    """
+    parts = hms.strip().split(":")
     if len(parts) != 3:
         raise ValueError("Tempo inválido")
-    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    hours, minutes, seconds = parts
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
-def cut_video(input_path: str, output_path: str, start: int, end: int) -> None:
+def cut_video(input_path: str, output_path: str, start: float, end: float) -> None:
     """Cut ``input_path`` between ``start`` and ``end`` seconds and save to ``output_path``."""
-    clip = VideoFileClip(input_path).subclip(start, end)
-    clip.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
-    clip.close()
+    with VideoFileClip(input_path) as src:
+        sub = src.subclip(start, end)
+        sub.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
+        sub.close()
 
 def cut_vertical_halves(input_path: str, left_output: str, right_output: str) -> None:
     """Split the video vertically into left and right halves."""
