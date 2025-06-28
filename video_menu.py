@@ -848,7 +848,11 @@ class AutoCutScreen(Screen):
         try:
             model = whisper.load_model("base")
             result = model.transcribe(path, fp16=False)
-            transcript = result.get("text", "")
+            segments = result["segments"]
+            transcript = "\n".join(
+                f"{seconds_to_hms(s['start'])}-{seconds_to_hms(s['end'])} {s['text'].strip()}"
+                for s in segments
+            )
             Clock.schedule_once(lambda *_: self.update_progress(50))
 
             clip = VideoFileClip(path)
