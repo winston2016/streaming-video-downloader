@@ -914,7 +914,7 @@ class AutoCutScreen(Screen):
                         continue
                 if 0 <= start_sec < end_sec <= duration_sec:
                     suggestions.append(item)
-            date_dir = Path("videos") / datetime.now().strftime("%Y-%m-%d")
+            date_dir = Path("videos") / datetime.now().strftime("%Y-%m-%d") / "gpt"
             date_dir.mkdir(parents=True, exist_ok=True)
             with open(date_dir / "suggestions.json", "w", encoding="utf-8") as f:
                 json.dump({"file": path, "suggestions": suggestions}, f, ensure_ascii=False, indent=2)
