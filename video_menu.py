@@ -670,9 +670,10 @@ class CutScreen(Screen):
         end_str = seconds_to_hms(end).replace(":", "-")
         base_dir = os.path.dirname(path)
         original_name = os.path.basename(path)
-        out_file = os.path.join(
-            base_dir, f"corte_{start_str}_{end_str}_{original_name}"
+        out_file = os.path.abspath(
+            os.path.join(base_dir, f"corte_{start_str}_{end_str}_{original_name}")
         )
+        temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
 
         ext = os.path.splitext(out_file)[1].lower()
         if ext == ".webm":
@@ -682,7 +683,13 @@ class CutScreen(Screen):
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
-        clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
+        clip.write_videofile(
+            out_file,
+            codec=video_codec,
+            audio_codec=audio_codec,
+            temp_audiofile=temp_audio,
+            remove_temp=True,
+        )
         clip.close()
 
         Clock.schedule_once(lambda *_: self.update_progress(100))
@@ -1067,10 +1074,13 @@ class AutoCutScreen(Screen):
         end_str = seconds_to_hms(end)
         out_dir = _get_platform_dir("gpt")
         original_name = os.path.basename(path)
-        out_file = os.path.join(
-            out_dir,
-            f"corte_{self.cut_counter}_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}_{original_name}",
+        out_file = os.path.abspath(
+            os.path.join(
+                out_dir,
+                f"corte_{self.cut_counter}_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}_{original_name}",
+            )
         )
+        temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
         ext = os.path.splitext(out_file)[1].lower()
         if ext == ".webm":
             video_codec = "libvpx"
@@ -1079,7 +1089,13 @@ class AutoCutScreen(Screen):
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
-        clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
+        clip.write_videofile(
+            out_file,
+            codec=video_codec,
+            audio_codec=audio_codec,
+            temp_audiofile=temp_audio,
+            remove_temp=True,
+        )
         clip.close()
         self.cut_counter += 1
         self.generated_cuts.append(out_file)
