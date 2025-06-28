@@ -874,10 +874,18 @@ class AutoCutScreen(Screen):
             completion = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
+                # Allow a larger response so the JSON is not truncated
+                max_tokens=500,
             )
             text = completion.choices[0].message.content
-            logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
+            finish_reason = completion.choices[0].finish_reason
+            logging.info(
+                "Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200]
+            )
+            if finish_reason and finish_reason != "stop":
+                raise RuntimeError(
+                    f"Resposta do modelo incompleta (finish_reason={finish_reason})"
+                )
             try:
                 suggestions = json.loads(text)
             except Exception as exc:
