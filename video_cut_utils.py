@@ -22,9 +22,17 @@ def parse_time(hms: str) -> float:
 
 def cut_video(input_path: str, output_path: str, start: float, end: float) -> None:
     """Cut ``input_path`` between ``start`` and ``end`` seconds and save to ``output_path``."""
+    output_path = os.path.abspath(output_path)
+    temp_audio = os.path.splitext(output_path)[0] + "_temp_audio.m4a"
     with VideoFileClip(input_path) as src:
         sub = src.subclip(start, end)
-        sub.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
+        sub.write_videofile(
+            output_path,
+            codec=VIDEO_CODEC,
+            audio_codec="aac",
+            temp_audiofile=temp_audio,
+            remove_temp=True,
+        )
         sub.close()
 
 def cut_vertical_halves(input_path: str, left_output: str, right_output: str) -> None:
