@@ -683,6 +683,7 @@ class CutScreen(Screen):
             audio_codec = "aac"
 
         clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
+        clip.close()
 
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(
@@ -1079,6 +1080,7 @@ class AutoCutScreen(Screen):
             audio_codec = "aac"
 
         clip.write_videofile(out_file, codec=video_codec, audio_codec=audio_codec)
+        clip.close()
         self.cut_counter += 1
         self.generated_cuts.append(out_file)
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))

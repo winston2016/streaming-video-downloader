@@ -66,6 +66,8 @@ class VideoCropperApp:
 
         # Salve o vídeo cortado
         cropped_video.write_videofile(self.output_video_path, codec=VIDEO_CODEC)
+        cropped_video.close()
+        video.close()
 
         messagebox.showinfo("Concluído", "O vídeo foi cortado e salvo com sucesso!")
         self.progress_label.config(text="Processo concluído!")

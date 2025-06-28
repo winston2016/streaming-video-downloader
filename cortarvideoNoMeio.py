@@ -34,6 +34,9 @@ def cortar_verticalmente():
 
         video_esquerda.write_videofile(output_file_esquerda, codec=VIDEO_CODEC, audio_codec="aac")
         video_direita.write_videofile(output_file_direita, codec=VIDEO_CODEC, audio_codec="aac")
+        video_esquerda.close()
+        video_direita.close()
+        video.close()
 
         messagebox.showinfo("Sucesso", f"Vídeos cortados salvos como {output_file_esquerda} e {output_file_direita}")
     except Exception as e:

@@ -70,6 +70,7 @@ def cortar_video():
     try:
         video = VideoFileClip(input_file).subclip(start_time, end_time)
         video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
+        video.close()
         messagebox.showinfo("Sucesso", f"Vídeo cortado salvo como {output_file}")
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao cortar o vídeo: {e}")
