@@ -12,6 +12,7 @@ import os
 import threading
 import logging
 from pathlib import Path
+import json
 
 VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
@@ -102,6 +103,20 @@ def seconds_to_hms(value: float) -> str:
     m = (total % 3600) // 60
     s = total % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def parse_suggestions(text):
+    """Parse ChatGPT response into a list of suggestions."""
+    suggestions = []
+    for line in text.splitlines():
+        m = re.search(r"(\d{2}:\d{2}:\d{2}).*?(\d{2}:\d{2}:\d{2})(?:\s*-?\s*(.*))?", line)
+        if not m:
+            continue
+        start, end, title = m.group(1), m.group(2), (m.group(3) or "").strip()
+        if not title:
+            title = f"Corte {len(suggestions) + 1}"
+        suggestions.append({"start": start, "end": end, "title": title})
+    return suggestions
 
 
 def extract_instagram_shortcode(url: str) -> str:
@@ -201,6 +216,9 @@ class MenuScreen(Screen):
         btn_auto = Button(text="Corte Automático")
         btn_auto.bind(on_press=lambda *_: setattr(self.manager, "current", "auto"))
         layout.add_widget(btn_auto)
+        btn_saved = Button(text="Sugestões Salvas")
+        btn_saved.bind(on_press=lambda *_: setattr(self.manager, "current", "suggestions"))
+        layout.add_widget(btn_saved)
         btn_conf = Button(text="Configurar API")
         btn_conf.bind(on_press=lambda *_: setattr(self.manager, "current", "config"))
         layout.add_widget(btn_conf)
@@ -268,6 +286,12 @@ class DownloadScreen(Screen):
         popup = Popup(title=title, content=popup_layout, size_hint=(0.75, 0.5))
         btn.bind(on_press=popup.dismiss)
         popup.open()
+
+
+
+
+
+
 
     def open_site(self, url):
         # Use different behavior depending on the current platform
@@ -827,27 +851,33 @@ class AutoCutScreen(Screen):
             )
             text = completion.choices[0].message.content
             logging.info("Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200])
+            suggestions = parse_suggestions(text)
+            date_dir = Path("videos") / datetime.now().strftime("%Y-%m-%d")
+            date_dir.mkdir(parents=True, exist_ok=True)
+            with open(date_dir / "suggestions.json", "w", encoding="utf-8") as f:
+                json.dump({"file": path, "suggestions": suggestions}, f, ensure_ascii=False, indent=2)
         except Exception as exc:
             logging.exception("OpenAI request failed")
             Clock.schedule_once(lambda *_, exc=exc: self._generate_failed(exc))
             return
-        Clock.schedule_once(lambda *_: self._generate_done(text))
+        Clock.schedule_once(lambda *_: self._generate_done(suggestions))
 
     def _generate_failed(self, exc):
         self.hide_loading()
         self.show_popup("Erro", str(exc))
 
-    def _generate_done(self, text):
+    def _generate_done(self, suggestions):
         self.hide_loading()
         self.update_progress(100)
-        self.show_suggestions(text)
+        self.show_suggestions(suggestions)
 
-    def show_suggestions(self, text):
-        import re
+    def show_suggestions(self, suggestions):
         self.suggestions_box.clear_widgets()
-        lines = re.findall(r"(\d{2}:\d{2}:\d{2}).*(\d{2}:\d{2}:\d{2})", text)
-        for idx, (start, end) in enumerate(lines, start=1):
-            btn = Button(text=f"{idx}. {start} - {end}", size_hint_y=None, height=40)
+        for idx, item in enumerate(suggestions, start=1):
+            title = item.get("title", f"{item['start']} - {item['end']}")
+            start = item["start"]
+            end = item["end"]
+            btn = Button(text=f"{idx}. {title}", size_hint_y=None, height=40)
             btn.bind(on_press=lambda _btn, s=start, e=end: self.preview_segment(s, e))
             self.suggestions_box.add_widget(btn)
 
@@ -906,6 +936,7 @@ class AutoCutScreen(Screen):
         btn_box.add_widget(btn_cancel)
         layout.add_widget(btn_box)
         popup = Popup(title='Prévia do corte', content=layout, size_hint=(0.9, 0.9))
+        self.preview_popup = popup
         btn_cancel.bind(on_press=popup.dismiss)
         btn_save.bind(on_press=lambda *_: self.save_preview_cut(path))
         popup.open()
@@ -1031,6 +1062,65 @@ class AutoCutScreen(Screen):
         popup.open()
 
 
+class SuggestionsScreen(Screen):
+    """Display saved suggestions from ``suggestions.json`` files."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.suggestions_box = BoxLayout(orientation="vertical", size_hint_y=None)
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(Label(text="Sugestões Salvas", font_size="20sp"))
+        layout.add_widget(self.suggestions_box)
+        btn_refresh = Button(text="Recarregar", size_hint_y=None, height=40)
+        btn_refresh.bind(on_press=self.load_suggestions)
+        layout.add_widget(btn_refresh)
+        back = Button(text="Voltar", size_hint_y=None, height=40)
+        back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
+        layout.add_widget(back)
+        self.add_widget(layout)
+        Clock.schedule_once(self.load_suggestions, 0)
+
+    def load_suggestions(self, *_):
+        self.suggestions_box.clear_widgets()
+        root = Path("videos")
+        if not root.exists():
+            return
+        for date_dir in sorted(root.iterdir()):
+            sug_file = date_dir / "suggestions.json"
+            if not sug_file.exists():
+                continue
+            try:
+                with open(sug_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception as exc:
+                print("Erro ao ler", sug_file, exc)
+                continue
+            video_path = data.get("file", "")
+            for item in data.get("suggestions", []):
+                title = item.get("title", f"{item['start']} - {item['end']}")
+                row = BoxLayout(size_hint_y=None, height=40)
+                row.add_widget(Label(text=title))
+                btn_prev = Button(text="Prévia", size_hint_x=None, width=80)
+                btn_cut = Button(text="Cortar", size_hint_x=None, width=80)
+                start = item["start"]
+                end = item["end"]
+                btn_prev.bind(on_press=lambda _, p=video_path, s=start, e=end: self.preview(p, s, e))
+                btn_cut.bind(on_press=lambda _, p=video_path, s=start, e=end: self.cut(p, s, e))
+                row.add_widget(btn_prev)
+                row.add_widget(btn_cut)
+                self.suggestions_box.add_widget(row)
+
+    def preview(self, path, start, end):
+        auto = self.manager.get_screen("auto")
+        auto.file_path.text = path
+        auto.preview_segment(start, end)
+
+    def cut(self, path, start, end):
+        auto = self.manager.get_screen("auto")
+        auto.show_loading()
+        s = hms_to_seconds(start)
+        e = hms_to_seconds(end)
+        threading.Thread(target=auto._cut_video, args=(path, s, e), daemon=True).start()
 # App ---------------------------------------------------------------------
 
 class VideoApp(App):
@@ -1040,6 +1130,7 @@ class VideoApp(App):
         sm.add_widget(DownloadScreen(name="download"))
         sm.add_widget(CutScreen(name="cut"))
         sm.add_widget(AutoCutScreen(name="auto"))
+        sm.add_widget(SuggestionsScreen(name="suggestions"))
         sm.add_widget(PostScreen(name="post"))
         sm.add_widget(ConfigScreen(name="config"))
         return sm
