@@ -52,11 +52,27 @@ import yt_dlp
 import instaloader
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 from PIL import Image
+from moviepy.audio.io.ffmpeg_audiowriter import FFMPEG_AudioWriter
 
 # Pillow >=10 removed the Image.ANTIALIAS constant used by MoviePy.
 # Provide a fallback for compatibility with older MoviePy versions.
 if not hasattr(Image, "ANTIALIAS"):
     Image.ANTIALIAS = Image.Resampling.LANCZOS
+
+# Fix a bug in MoviePy 1.0.3 where ``FFMPEG_AudioWriter`` may not define
+# the ``ext`` attribute before ``write_frames`` is called. This leads to an
+# ``AttributeError`` when audio encoding fails (e.g. due to missing codecs).
+# Ensure ``ext`` is always set so the error handling works correctly.
+if not hasattr(FFMPEG_AudioWriter, "_ext_patch"):
+    _orig_init = FFMPEG_AudioWriter.__init__
+
+    def _init_with_ext(self, filename, *a, **k):
+        _orig_init(self, filename, *a, **k)
+        if not hasattr(self, "ext"):
+            self.ext = os.path.splitext(filename)[1]
+
+    FFMPEG_AudioWriter.__init__ = _init_with_ext
+    FFMPEG_AudioWriter._ext_patch = True
 
 try:
     from tkinter import filedialog, Tk
@@ -683,13 +699,19 @@ class CutScreen(Screen):
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
-        clip.write_videofile(
-            out_file,
-            codec=video_codec,
-            audio_codec=audio_codec,
-            temp_audiofile=temp_audio,
-            remove_temp=True,
-        )
+        try:
+            clip.write_videofile(
+                out_file,
+                codec=video_codec,
+                audio_codec=audio_codec,
+                temp_audiofile=temp_audio,
+                remove_temp=True,
+            )
+        except Exception as exc:
+            clip.close()
+            Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(self.hide_loading)
+            return
         clip.close()
 
         Clock.schedule_once(lambda *_: self.update_progress(100))
@@ -1089,13 +1111,19 @@ class AutoCutScreen(Screen):
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
 
-        clip.write_videofile(
-            out_file,
-            codec=video_codec,
-            audio_codec=audio_codec,
-            temp_audiofile=temp_audio,
-            remove_temp=True,
-        )
+        try:
+            clip.write_videofile(
+                out_file,
+                codec=video_codec,
+                audio_codec=audio_codec,
+                temp_audiofile=temp_audio,
+                remove_temp=True,
+            )
+        except Exception as exc:
+            clip.close()
+            Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
+            Clock.schedule_once(self.hide_loading)
+            return
         clip.close()
         self.cut_counter += 1
         self.generated_cuts.append(out_file)
@@ -1144,7 +1172,14 @@ class AutoCutScreen(Screen):
             final = concatenate_videoclips(clips)
             out_dir = os.path.dirname(paths[0])
             out_file = os.path.join(out_dir, f"merged_{datetime.now().strftime('%H-%M-%S')}.mp4")
-            final.write_videofile(out_file, codec=VIDEO_CODEC, audio_codec="aac")
+            try:
+                final.write_videofile(out_file, codec=VIDEO_CODEC, audio_codec="aac")
+            except Exception as exc:
+                for clip in clips:
+                    clip.close()
+                final.close()
+                self.show_popup("Erro", str(exc))
+                return
             for clip in clips:
                 clip.close()
             final.close()
