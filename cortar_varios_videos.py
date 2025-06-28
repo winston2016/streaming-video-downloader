@@ -1,22 +1,17 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from moviepy.editor import VideoFileClip
-import datetime
 import os
 
-VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+from video_cut_utils import (
+    parse_time,
+    cut_video,
+)
 
 def escolher_video():
     input_file = filedialog.askopenfilename(title="Selecione o arquivo de vídeo")
     if input_file:
         input_file_path.set(input_file)
 
-def converter_para_hms(segundos):
-    return str(datetime.timedelta(seconds=segundos))
-
-def converter_para_segundos(hms):
-    partes = hms.split(':')
-    return int(partes[0]) * 3600 + int(partes[1]) * 60 + int(partes[2])
 
 def cortar_videos():
     input_file = input_file_path.get()
@@ -37,13 +32,11 @@ def cortar_videos():
         for i, intervalo in enumerate(intervalos, start=1):
             try:
                 inicio, fim = intervalo.split(" até ")
-                start_time = converter_para_segundos(inicio.strip())
-                end_time = converter_para_segundos(fim.strip())
+                start_time = parse_time(inicio.strip())
+                end_time = parse_time(fim.strip())
 
-                video = VideoFileClip(input_file).subclip(start_time, end_time)
                 output_file = os.path.join(pasta_saida, f"corte_{i}.mp4")
-                video.write_videofile(output_file, codec=VIDEO_CODEC, audio_codec="aac")
-                video.close()
+                cut_video(input_file, output_file, start_time, end_time)
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao processar o intervalo '{intervalo}': {e}")
                 continue
