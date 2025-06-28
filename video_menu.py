@@ -881,6 +881,9 @@ class AutoCutScreen(Screen):
             finish_reason = completion.choices[0].finish_reason
             usage = getattr(completion, "usage", None)
             logging.info(
+                "Prompt:\n%s\nResponse preview:\n%s", prompt, text[:200]
+            )
+            logging.info(
                 "Prompt:\n%s\nResponse:\n%s\nUsage: %s", prompt, text, usage
             )
             if finish_reason and finish_reason != "stop":
