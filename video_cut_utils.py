@@ -2,6 +2,7 @@ import os
 import datetime
 from moviepy.editor import VideoFileClip
 from moviepy.video.fx.all import crop
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 
 VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
 
@@ -21,19 +22,17 @@ def parse_time(hms: str) -> float:
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 def cut_video(input_path: str, output_path: str, start: float, end: float) -> None:
-    """Cut ``input_path`` between ``start`` and ``end`` seconds and save to ``output_path``."""
+    """Cut ``input_path`` between ``start`` and ``end`` seconds and save to ``output_path``.
+
+    Uses ``ffmpeg`` directly to avoid re-encoding the video so the quality is
+    preserved.
+    """
     output_path = os.path.abspath(output_path)
-    temp_audio = os.path.splitext(output_path)[0] + "_temp_audio.m4a"
-    with VideoFileClip(input_path) as src:
-        sub = src.subclip(start, end)
-        sub.write_videofile(
-            output_path,
-            codec=VIDEO_CODEC,
-            audio_codec="aac",
-            temp_audiofile=temp_audio,
-            remove_temp=True,
-        )
-        sub.close()
+
+    # ``ffmpeg_extract_subclip`` performs a simple trim using ``-c copy`` which
+    # keeps the original streams intact. This prevents quality degradation that
+    # can occur when re-encoding the video with ``write_videofile``.
+    ffmpeg_extract_subclip(input_path, start, end, targetname=output_path)
 
 def cut_vertical_halves(input_path: str, left_output: str, right_output: str) -> None:
     """Split the video vertically into left and right halves."""
