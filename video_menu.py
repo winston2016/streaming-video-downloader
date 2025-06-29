@@ -689,15 +689,15 @@ class CutScreen(Screen):
         out_file = os.path.abspath(
             os.path.join(base_dir, f"corte_{start_str}_{end_str}_{original_name}")
         )
-        temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
-
         ext = os.path.splitext(out_file)[1].lower()
         if ext == ".webm":
             video_codec = "libvpx"
             audio_codec = "libvorbis"
+            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.ogg"
         else:
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
+            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
 
         try:
             clip.write_videofile(
@@ -1102,14 +1102,15 @@ class AutoCutScreen(Screen):
                 f"corte_{self.cut_counter}_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}_{original_name}",
             )
         )
-        temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
         ext = os.path.splitext(out_file)[1].lower()
         if ext == ".webm":
             video_codec = "libvpx"
             audio_codec = "libvorbis"
+            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.ogg"
         else:
             video_codec = VIDEO_CODEC
             audio_codec = "aac"
+            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
 
         try:
             clip.write_videofile(
