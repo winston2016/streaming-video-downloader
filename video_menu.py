@@ -51,6 +51,7 @@ logging.basicConfig(
 import yt_dlp
 import instaloader
 from moviepy.editor import VideoFileClip, concatenate_videoclips
+from video_cut_utils import cut_video
 from PIL import Image
 from moviepy.audio.io.ffmpeg_audiowriter import FFMPEG_AudioWriter
 
@@ -677,7 +678,7 @@ class CutScreen(Screen):
             Clock.schedule_once(self.hide_loading)
             return
 
-        clip = clip.subclip(start, end)
+        clip.close()
 
         # Keep the original resolution and store the cut alongside the source
         # video. The output file name includes the selected time span and the
@@ -689,30 +690,12 @@ class CutScreen(Screen):
         out_file = os.path.abspath(
             os.path.join(base_dir, f"corte_{start_str}_{end_str}_{original_name}")
         )
-        ext = os.path.splitext(out_file)[1].lower()
-        if ext == ".webm":
-            video_codec = "libvpx"
-            audio_codec = "libvorbis"
-            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.ogg"
-        else:
-            video_codec = VIDEO_CODEC
-            audio_codec = "aac"
-            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
-
         try:
-            clip.write_videofile(
-                out_file,
-                codec=video_codec,
-                audio_codec=audio_codec,
-                temp_audiofile=temp_audio,
-                remove_temp=True,
-            )
+            cut_video(path, out_file, start, end)
         except Exception as exc:
-            clip.close()
             Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
             Clock.schedule_once(self.hide_loading)
             return
-        clip.close()
 
         Clock.schedule_once(lambda *_: self.update_progress(100))
         Clock.schedule_once(
@@ -1091,7 +1074,7 @@ class AutoCutScreen(Screen):
             Clock.schedule_once(self.hide_loading)
             return
 
-        clip = clip.subclip(start, end)
+        clip.close()
         start_str = seconds_to_hms(start)
         end_str = seconds_to_hms(end)
         out_dir = _get_platform_dir("gpt")
@@ -1102,35 +1085,18 @@ class AutoCutScreen(Screen):
                 f"corte_{self.cut_counter}_gpt_{start_str.replace(':', '-')}_{end_str.replace(':', '-')}_{original_name}",
             )
         )
-        ext = os.path.splitext(out_file)[1].lower()
-        if ext == ".webm":
-            video_codec = "libvpx"
-            audio_codec = "libvorbis"
-            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.ogg"
-        else:
-            video_codec = VIDEO_CODEC
-            audio_codec = "aac"
-            temp_audio = os.path.splitext(out_file)[0] + "_temp_audio.m4a"
-
         try:
-            clip.write_videofile(
-                out_file,
-                codec=video_codec,
-                audio_codec=audio_codec,
-                temp_audiofile=temp_audio,
-                remove_temp=True,
-            )
+            cut_video(path, out_file, start, end)
         except Exception as exc:
-            clip.close()
             Clock.schedule_once(lambda *_, exc=exc: self.show_popup("Erro", str(exc)))
             Clock.schedule_once(self.hide_loading)
             return
-        clip.close()
         self.cut_counter += 1
         self.generated_cuts.append(out_file)
         Clock.schedule_once(lambda *_: self.show_popup("Sucesso", "Corte gerado"))
         Clock.schedule_once(self.hide_loading)
         Clock.schedule_once(lambda *_: open_post_screen(out_file))
+
 
     def merge_cuts(self, *_):
         if not self.generated_cuts:
