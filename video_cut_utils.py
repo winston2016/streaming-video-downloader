@@ -1,56 +1,126 @@
 import os
 import datetime
-from moviepy.editor import VideoFileClip
-from moviepy.video.fx.all import crop
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+import subprocess
 
-VIDEO_CODEC = "h264_nvenc" if os.getenv("VIDEO_HWACCEL") else "libx264"
+# Codec principal
+VIDEO_CODEC = "libx264"
+
+# Configuração de qualidade
+CRF = "18"
+PRESET = "veryslow"
 
 def format_seconds(seconds: int) -> str:
-    """Return time formatted as HH:MM:SS."""
+    """Formata segundos em HH:MM:SS."""
     return str(datetime.timedelta(seconds=int(seconds)))
 
 def parse_time(hms: str) -> float:
-    """Return seconds from an ``HH:MM:SS`` string.
-
-    Supports fractional seconds in the ``SS`` component.
-    """
+    """Converte HH:MM:SS para segundos."""
     parts = hms.strip().split(":")
     if len(parts) != 3:
-        raise ValueError("Tempo inválido")
+        raise ValueError("Formato de tempo inválido")
     hours, minutes, seconds = parts
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 def cut_video(input_path: str, output_path: str, start: float, end: float) -> None:
-    """Cut ``input_path`` between ``start`` and ``end`` seconds and save to ``output_path``.
-
-    Uses ``ffmpeg`` directly to avoid re-encoding the video so the quality is
-    preserved.
-    """
-    output_path = os.path.abspath(output_path)
-
-    # ``ffmpeg_extract_subclip`` performs a simple trim using ``-c copy`` which
-    # keeps the original streams intact. This prevents quality degradation that
-    # can occur when re-encoding the video with ``write_videofile``.
-    ffmpeg_extract_subclip(input_path, start, end, targetname=output_path)
-
-def cut_vertical_halves(input_path: str, left_output: str, right_output: str) -> None:
-    """Split the video vertically into left and right halves."""
-    clip = VideoFileClip(input_path)
-    width, height = clip.size
-    half = width // 2
-    left_clip = clip.crop(x1=0, y1=0, x2=half, y2=height)
-    right_clip = clip.crop(x1=half, y1=0, x2=width, y2=height)
-    left_clip.write_videofile(left_output, codec=VIDEO_CODEC, audio_codec="aac")
-    right_clip.write_videofile(right_output, codec=VIDEO_CODEC, audio_codec="aac")
-    left_clip.close()
-    right_clip.close()
-    clip.close()
+    """Corta trecho de vídeo sem reencodar (quando possível)."""
+    cmd = [
+        "ffmpeg",
+        "-ss", str(start),
+        "-to", str(end),
+        "-i", input_path,
+        "-c", "copy",
+        output_path
+    ]
+    subprocess.run(cmd, check=True)
 
 def crop_sides(input_path: str, output_path: str, left: int, right: int) -> None:
-    """Crop the video horizontally between ``left`` and ``right`` coordinates."""
-    clip = VideoFileClip(input_path)
-    cropped = crop(clip, x1=left, x2=right)
-    cropped.write_videofile(output_path, codec=VIDEO_CODEC, audio_codec="aac")
-    cropped.close()
-    clip.close()
+    """Corta as laterais horizontalmente, mantendo máxima qualidade."""
+    # Pega dimensões originais
+    probe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        input_path
+    ]
+    result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+    width, height = map(int, result.stdout.strip().split("x"))
+
+    # Calcula nova largura e garante múltiplo de 2
+    new_width = width - left - right
+    if new_width % 2 != 0:
+        new_width -= 1
+
+    # Altura deve ser par também
+    if height % 2 != 0:
+        height -= 1
+
+    x = left
+    y = 0
+
+    # Validação
+    if new_width <= 0:
+        raise ValueError("Nova largura ficou negativa ou zero.")
+    if new_width + x > width:
+        raise ValueError("Crop excede largura original.")
+
+    cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-filter:v", f"crop={new_width}:{height}:{x}:{y}",
+        "-c:v", VIDEO_CODEC,
+        "-crf", CRF,
+        "-preset", PRESET,
+        "-c:a", "copy",
+        output_path
+    ]
+    subprocess.run(cmd, check=True)
+
+def cut_vertical_halves(input_path: str, left_output: str, right_output: str) -> None:
+    """Divide vídeo em metades verticais com máxima qualidade."""
+    # Pega dimensões originais
+    probe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        input_path
+    ]
+    result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+    width, height = map(int, result.stdout.strip().split("x"))
+
+    # Calcula metade e garante múltiplo de 2
+    half_width = width // 2
+    if half_width % 2 != 0:
+        half_width -= 1
+
+    if height % 2 != 0:
+        height -= 1
+
+    # Metade esquerda
+    left_cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-filter:v", f"crop={half_width}:{height}:0:0",
+        "-c:v", VIDEO_CODEC,
+        "-crf", CRF,
+        "-preset", PRESET,
+        "-c:a", "copy",
+        left_output
+    ]
+    subprocess.run(left_cmd, check=True)
+
+    # Metade direita
+    right_cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-filter:v", f"crop={half_width}:{height}:{half_width}:0",
+        "-c:v", VIDEO_CODEC,
+        "-crf", CRF,
+        "-preset", PRESET,
+        "-c:a", "copy",
+        right_output
+    ]
+    subprocess.run(right_cmd, check=True)
